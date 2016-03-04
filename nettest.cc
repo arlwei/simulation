@@ -63,42 +63,42 @@ main (int argc, char *argv[])
   CCHChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
   CCHChannel.AddPropagationLoss("ns3::RangePropagationLossModel", "MaxRange",
                           DoubleValue(1200.0));
-
-
   Ptr<YansWifiChannel> CCH = CCHChannel.Create();
 
   //===wifiphy
-  YansWifiPhyHelper CCHPhy =  YansWifiPhyHelper::Default ();
-  CCHPhy.SetChannel (CCH);
-  CCHPhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11);
-  CCHPhy.Set ("TxPowerStart",DoubleValue (5.890e9));
-  CCHPhy.Set ("TxPowerEnd", DoubleValue (5.890e9));
+  YansWifiPhyHelper wavePhy =  YansWifiPhyHelper::Default ();
+  wavePhy.SetChannel (CCH);
+  wavePhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11);
+  wavePhy.Set ("TxPowerStart",DoubleValue (20));
+  wavePhy.Set ("TxPowerEnd", DoubleValue (20));
 
-//  // 802.11p mac
-//  NqosWaveMacHelper CCH80211pMac = NqosWaveMacHelper::Default ();
-//  Wifi80211pHelper CCH80211p = Wifi80211pHelper::Default ();
+////  // 802.11p mac
+  NqosWaveMacHelper wifi80211pMac = NqosWaveMacHelper::Default ();
 
-//  CCH80211p.SetRemoteStationManager ("ns3::ConstantRateWifiManager",
-//                                                                                  "DataMode",StringValue ("OfdmRate6MbpsBW10MHz"),
-//                                                                                  "ControlMode",StringValue ("OfdmRate6MbpsBW10MHz"));
+  Wifi80211pHelper waveHelper = Wifi80211pHelper::Default ();
+  waveHelper.SetRemoteStationManager ("ns3::ConstantRateWifiManager",
+                                                                                    "DataMode",StringValue ("OfdmRate6MbpsBW10MHz"),
+                                                                                    "ControlMode",StringValue ("OfdmRate6MbpsBW10MHz"));
 
-  WifiHelper wifi = WifiHelper::Default ();
-  wifi.SetRemoteStationManager ("ns3::AarfWifiManager");
 
-  NqosWifiMacHelper mac = NqosWifiMacHelper::Default ();
+//  YansWifiPhyHelper wavePhy = YansWifiPhyHelper::Default ();
+//  YansWifiChannelHelper wifiChannel = YansWifiChannelHelper::Default ();
+//  wavePhy.SetChannel (wifiChannel.Create ());
+//  NqosWaveMacHelper wifi80211pMac = NqosWaveMacHelper::Default ();
+//  Wifi80211pHelper waveHelper = Wifi80211pHelper::Default ();
 
-  Ssid ssid = Ssid ("ns-3-ssid");
-  mac.SetType ("ns3::StaWifiMac",
-               "Ssid", SsidValue (ssid),
-               "ActiveProbing", BooleanValue (false));
+//  Ssid ssid = Ssid ("ns-3-ssid");
+//  wifi80211pMac.SetType ("ns3::StaWifiMac",
+//               "Ssid", SsidValue (ssid),
+//               "ActiveProbing", BooleanValue (false));
 
   NetDeviceContainer m_VehDevices;
-  m_VehDevices = wifi.Install(CCHPhy, mac, m_vehicles);
+  m_VehDevices = waveHelper.Install(wavePhy, wifi80211pMac, m_vehicles);
 
-  mac.SetType ("ns3::ApWifiMac",
-               "Ssid", SsidValue (ssid));
+//  wifi80211pMac.SetType ("ns3::ApWifiMac",
+//               "Ssid", SsidValue (ssid));
   NetDeviceContainer m_ConDevices;
-  m_ConDevices = wifi.Install(CCHPhy, mac, m_controllers);
+  m_ConDevices = waveHelper.Install(wavePhy, wifi80211pMac, m_controllers);
 
   CsmaHelper csma;
   csma.SetChannelAttribute ("DataRate", StringValue ("100Mbps"));
@@ -117,7 +117,7 @@ main (int argc, char *argv[])
   NS_LOG_INFO ("Assign IP Addresses.");
   address.SetBase ("10.1.0.0", "255.255.0.0");
   m_VehInterface = address.Assign (m_VehDevices);
-  m_ConInterface = address.Assign (m_VehDevices);
+  m_ConInterface = address.Assign (m_ConDevices);
 
   address.SetBase ("10.2.0.0", "255.255.0.0");
   m_CSMAInterface = address.Assign (m_CSMADevices);
@@ -155,7 +155,7 @@ main (int argc, char *argv[])
     echoClient.SetAttribute ("PacketSize", UintegerValue (1024));
 
     ApplicationContainer clientApps =
-      echoClient.Install (m_controllers.Get (1));
+      echoClient.Install (m_vehicles.Get (3));
     clientApps.Start (Seconds (2.0));
     clientApps.Stop (Seconds (10.0));
 
@@ -165,9 +165,8 @@ main (int argc, char *argv[])
 
     if (tracing == true)
       {
-        csma.EnablePcapAll ("testnet");
-        CCHPhy.EnablePcap ("testnet", m_VehDevices.Get (10));
-        CCHPhy.EnablePcap ("testnet", m_ConDevices.Get (3));
+        wavePhy.EnablePcap ("testnet", m_VehDevices.Get (3));
+        wavePhy.EnablePcap ("testnet", m_ConDevices.Get (3));
       }
 
     Simulator::Run ();

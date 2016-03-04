@@ -21,6 +21,7 @@
 #include "ns3/integer.h"
 #include "ns3/wave-bsm-helper.h"
 #include "ns3/wave-helper.h"
+#include<string>
 
 using namespace ns3;
 
@@ -67,6 +68,9 @@ main (int argc, char *argv[])
 //          Names::Add(os.str(), m_vehicles.Get(i));
 //  }
 
+
+
+/**
   YansWifiChannelHelper wifiChannel = YansWifiChannelHelper::Default ();
   wifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
   wifiChannel.AddPropagationLoss("ns3::RangePropagationLossModel", "MaxRange",
@@ -82,11 +86,23 @@ main (int argc, char *argv[])
    YansWavePhyHelper wifiPhy =  YansWavePhyHelper::Default ();
    wifiPhy.SetChannel (channel);
    wifiPhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11);
+   wifiPhy.Set ("TxPowerStart",DoubleValue (5.890e9));
+   wifiPhy.Set ("TxPowerEnd", DoubleValue (5.890e9));
  
    // Setup WAVE PHY and MAC
-   NqosWaveMacHelper mac = NqosWaveMacHelper::Default ();
+//   NqosWaveMacHelper mac = NqosWaveMacHelper::Default ();
+//   mac.SetType ("ns3::AdhocWifiMac");
+
+   QosWaveMacHelper mac = QosWaveMacHelper::Default ();
+
+  //Wave Helper
    WaveHelper waveHelper = WaveHelper::Default ();
-   Wifi80211pHelper wifi = Wifi80211pHelper::Default ();
+ //  Wifi80211pHelper wifi = Wifi80211pHelper::Default ();
+   std::string ofdm = "OfdmRate6MbpsBW10MHz";
+   waveHelper.SetRemoteStationManager ("ns3::ConstantRateWifiManager",
+                                                                                  "DataMode",StringValue (ofdm),
+                                                                                  "ControlMode",StringValue (ofdm));
+
   //===channel
   //YansWifiChannelHelper CCHChannel = YansWifiChannelHelper::Default ();
   //CCHChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
@@ -122,7 +138,28 @@ main (int argc, char *argv[])
 //             "ActiveProbing", BooleanValue (false));
 
   NetDeviceContainer m_VehDevices;
-  m_VehDevices = wifi.Install(wifiPhy, mac, m_vehicles);
+  m_VehDevices = waveHelper.Install(wifiPhy, mac, m_vehicles);
+**/
+
+
+/**
+YansWifiChannelHelper wifiChannel = YansWifiChannelHelper::Default ();
+YansWavePhyHelper wavePhy =  YansWavePhyHelper::Default ();
+wavePhy.SetChannel (wifiChannel.Create ());
+QosWaveMacHelper waveMac = QosWaveMacHelper::Default ();
+WaveHelper waveHelper = WaveHelper::Default ();
+NetDeviceContainer m_VehDevices;
+m_VehDevices = waveHelper.Install (wavePhy, waveMac, m_vehicles);
+**/
+
+
+YansWifiPhyHelper wifiPhy = YansWifiPhyHelper::Default ();
+YansWifiChannelHelper wifiChannel = YansWifiChannelHelper::Default ();
+wifiPhy.SetChannel (wifiChannel.Create ());
+NqosWaveMacHelper wifi80211pMac = NqosWaveMacHelper::Default ();
+Wifi80211pHelper _80211pHelper = Wifi80211pHelper::Default ();
+NetDeviceContainer m_VehDevices;
+m_VehDevices = _80211pHelper.Install (wifiPhy, wifi80211pMac, m_vehicles);
 
   InternetStackHelper stack;
  // stack.SetRoutingHelper(aodv);
@@ -178,7 +215,7 @@ main (int argc, char *argv[])
 
     if (tracing == true)
       {
-        wifiPhy.EnablePcap ("testwave", m_VehDevices.Get (1));
+        wifiPhy.EnablePcapAll("testwave");
       }
 
     Simulator::Run ();
