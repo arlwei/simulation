@@ -58,23 +58,23 @@ public:
 
   Utils();
 
-  int readTraceFile(const char* fileName, std::vector<std::string> &vec_str);
+  int        readTraceFile(const char* fileName, std::vector<std::string> &vec_str);
   std::string trim(const std::string& str);
-  int split(const std::string& str, std::vector<std::string>& ret_, std::string sep);
+  int        split(const std::string& str, std::vector<std::string>& ret_, std::string sep);
 
-  bool isInIdleState(Vector &pos) const;
-  bool isInWaitingArea(Vector &pos) const;
+  bool       isInIdleState(Vector &pos) const;
+  bool       isInWaitingArea(Vector &pos) const;
 
-  double travelTime( Vector &pos, const int nextWaiting, const double speed) const;
-  bool isEnteringWaitingArea(Vector &pos) const;
-  uint32_t whichIntersection(uint32_t) const;
-  uint32_t whichWaitingArea(uint32_t) const;
-  uint32_t whichLane(uint32_t enterArea, uint32_t leavingArea);
-  double predictTime(uint32_t lane, uint32_t inter, double x, double y);
-  void getPosition(uint32_t lane,uint32_t inter_id,uint32_t count,double &x,double &y);
-  double passIntersectionWait(uint32_t lane, uint32_t inter_id, double &x, double &y);
-  double passIntersectionCore(uint32_t lane, uint32_t inter_id, double &x, double &y);
-  double passIntersectionIdle(uint32_t lane, uint32_t inter_id, double &x, double &y);
+  double     travelTime( Vector &pos, const int nextWaiting, const double speed) const;
+  bool       isEnteringWaitingArea(Vector &pos) const;
+  uint32_t   whichIntersection(uint32_t) const;
+  uint32_t   whichWaitingArea(uint32_t) const;
+  uint32_t   whichLane(uint32_t enterArea, uint32_t leavingArea);
+  double     predictTime(uint32_t lane, uint32_t inter, double x, double y);
+  void       getPosition(uint32_t lane,uint32_t inter_id,uint32_t count,double &x,double &y);
+  double     passIntersectionWait(uint32_t lane, uint32_t inter_id, double &x, double &y);
+  double     passIntersectionCore(uint32_t lane, uint32_t inter_id, double &x, double &y);
+  double     passIntersectionIdle(uint32_t lane, uint32_t inter_id, double &x, double &y);
 
   bool doubleEquals(double a,double b) const;
 
@@ -856,7 +856,7 @@ public:
           void HandleRead (Ptr<Socket> socket);
           void Start(void);
           void SetUp(Ipv4InterfaceAddress csmaInterface);
-  friend  void vehicle::pos_xy(uint32_t lane, uint32_t inter_id, double &x, double &y);
+  friend  void vehicle::pos_xy(uint32_t lane, uint32_t inter_id, double &x, double &y, std::vector<intersection> intsect);
 
 private:
   virtual void StartApplication (void);
@@ -1428,6 +1428,7 @@ private:
   uint32_t        intersection_id;
   uint32_t        lane_id;
   std::vector<uint32_t>      paths;
+  std::vector<intersection>  control_apps;
   uint32_t        path_index;
   Ptr<WaypointMobilityModel> mobility;
   bool            last;
@@ -1460,7 +1461,7 @@ vehicle::~vehicle ()
 void
 vehicle::Setup (const Ipv4InterfaceContainer &address, uint16_t port_send, uint32_t packetSize,
                 uint32_t nPackets, DataRate dataRate, Ptr<WaypointMobilityModel> waypointModel,
-                uint32_t v_id, std::vector<uint32_t> &traces)
+                uint32_t v_id, std::vector<uint32_t> &traces, std::vector<intersection> &intersections5)
 {
   m_CSMAInterface = address;
   m_port_send = port_send;
@@ -1470,6 +1471,7 @@ vehicle::Setup (const Ipv4InterfaceContainer &address, uint16_t port_send, uint3
   mobility = waypointModel;
   vehicle_id = v_id;
   paths = traces;
+  control_apps = intersections5;
 }
 
 void
@@ -1637,6 +1639,18 @@ vehicle::sendRequest()
 
       m_socket->Send (packet);
 
+      //the vehicle will move to the intersection
+      double next_x = x;
+      double next_y = y;
+      pos_xy(lane_id, intersection_id, next_x, next_y, control_apps);
+      double time = (fabs(x - next_x) + fabs(y - next_y))/(util.speed_waiting) + Simulator::Now ().GetSeconds ();
+      pos.x = next_x;
+      pos.y = next_y;
+      Waypoint wpt (Seconds(time), pos);
+      mobility->AddWaypoint (wpt);
+
+
+
       std::cout << "vehicle" << vehicle_id << " at intersection " << intersection_id << " send request" << std::endl;
 }
 
@@ -1684,11 +1698,12 @@ vehicle::setConnectSocket(uint32_t inter)
  * when the vehicle arrive at waiting area, it need to know how many vehicles are ahead of itself.
  */
 void
-vehicle::pos_xy(uint32_t lane, uint32_t inter_id, double &x, double &y)
+vehicle::pos_xy(uint32_t lane, uint32_t inter_id, double &x, double &y, std::vector<intersection> &intsect)
 {
   //calculate how many vehicles are ahead of the newcomer
   uint_t count = 0;
-  for(std::vector<rp>::iterator it = pending.begin (); it != pending.end (); it++) {
+  for(std::vector<rp>::iterator it = intsect[inter_id - 1].pending.begin ();
+      it != intsect[inter_id - 1].pending.end (); it++) {
       if(it->lane_id == lane && util.doubleEquals (it->time, 0)) {
           count++;
         }
@@ -1710,15 +1725,6 @@ public:
 	~CMultiMain();
 	void Simulate(int argc, char *argv[]);
 
-protected:
-	void SetDefault();
-	void ParseArguments(int argc, char *argv[]);
-	void LoadTraffic();
-	void ConfigNode();
-	void ConfigChannels();
-	void ConfigDevices();
-	void ConfigMobility();
-	void Run();
 
 private:
 	Ptr<Socket> source;
@@ -1743,15 +1749,6 @@ private:
 	NodeContainer m_controllers; //Vehicles
 	NetDeviceContainer m_VehDevices, m_ConDevices, m_CSMADevices;
 	Ipv4InterfaceContainer m_VehInterface, m_ConInterface, m_CSMAInterface;
-	//////////TongJi////////////
-	uint32_t Rx_Routing_Bytes, Tx_Routing_Bytes;
-	uint32_t RX_Routing_Pkts, TX_Routing_Pkts;
-	uint32_t Rx_Data_Bytes, Tx_Data_Bytes;
-	uint32_t Rx_Data_Pkts, Tx_Data_Pkts;
-	uint32_t m_port;
-	ApplicationContainer m_source, m_sink, m_cars, m_controller;
-	Ptr<ns3::vanetmobility::VANETmobility> VMo;
-	void CourseChange (std::string foo, Ptr<const MobilityModel> mobility);
 
 	Utils util;
 	std::vector<std::string> vec_str; //save the information of vehicles
@@ -1762,32 +1759,22 @@ private:
 	uint32_t waitingAreaLength;
 	uint32_t coreAreaLength;
 	uint32_t idleAreaLength;
-	uint32_t state;
-	std::vector<vehicle> vec_vehicles;  //the vector to keep all vehicles object
+	std::vector<Node> vec_vehicles;  //the vector to keep all vehicles object
 	std::vector<intersection> vec_intersections;  //the vector to keep all intersections object
 	uint32_t spaceOccupied;	// the space of a vehicle occupied when it is in the waiting lane
+
+	void CourseChange (std::string foo, Ptr<const MobilityModel> mobility);
+	void SetDefault();
+	void ParseArguments(int argc, char *argv[]);
+	void LoadTraffic();
+	void ConfigNode();
+	void ConfigChannels();
+	void ConfigDevices();
+	void ConfigMobility();
+	void Run();
 	void CMultiMain::enterAndRequest(Ptr<const MobilityModel> mobility, vehicle &veh, uint32_t currentIndex, Vector &pos);
+	void SetUpApplication();
 };
-
-void
-CMultiMain::CourseChange (std::string foo, Ptr<const MobilityModel> mobility)
-{
-   Vector pos = mobility->GetPosition ();
-
-   if( util.isEnteringWaitingArea (pos)) {
-       std::vector<std::string> ret;
-       util.split (foo, ret, '/');
-       vehicle veh = vec_vehicles[atoi(ret[1].c_str())]; //get the vehicle node id and the vehicle object
-       uint32_t currentIndex = veh.curPath;
-       if(currentIndex + 1 < veh.paths.size ()) {  //the current index is not the last one of paths
-           enterAndRequest(mobility, veh, currentIndex, pos);
-         }
-       else
-         break;
-   }
-   std::cout << Simulator::Now () << ", model=" << mobility << ", POS: x=" << pos.x << ", y=" << pos.y
-   << ", z=" << pos.z << std::endl;
-}
 
 
 CMultiMain::CMultiMain()
@@ -1807,15 +1794,7 @@ CMultiMain::CMultiMain()
 	speed_waiting = 12;
 	goStraight = 3.0;
 	turnLeft = 4.0;
-	Rx_Data_Bytes = 0;
-	Rx_Data_Pkts = 0;
-	Rx_Routing_Bytes = 0;
-	RX_Routing_Pkts = 0;
-	Tx_Data_Bytes = 0;
-	Tx_Data_Pkts = 0;
-	Tx_Routing_Bytes = 0;
-	TX_Routing_Pkts = 0;
-	m_port = 65419;
+
 	spaceOccupied = 4;
 	waitingAreaLength = 100;
 	coreAreaLength = 40;
@@ -1834,12 +1813,11 @@ void CMultiMain::Simulate(int argc, char *argv[])
 	SetDefault();
 	ParseArguments(argc, argv);
 	LoadTraffic();
-	ConfigNode();
-	ConfigChannels();
-	ConfigDevices();
+	CreateNode();
+	CreateChannels();
+	InstallInternetStack();
 	ConfigMobility();
-	SetupRoutingPacketReceive ();
-	ConfigTracing();
+	SetUpApplication();
 	Run();
 	ProcessOutputs();
 }
@@ -1905,20 +1883,6 @@ CMultiMain::CreateNode()
 	    intersection in(m_controllers.Get (i));
 	    vec_intersections.push_back (in);
 	  }
-
-	// Name nodes
-	for (uint32_t i = 0; i < vehNum; ++i)
-	{
-		std::ostringstream os;
-		os << "vehicle-" << i;
-		Names::Add(os.str(), m_vehicles.Get(i));
-	}
-	for (uint32_t i = 0; i < conNum; ++i)
-	{
-		std::ostringstream os;
-		os << "controller-" << i;
-		Names::Add(os.str(), m_vehicles.Get(i));
-	}
 }
 
 
@@ -1926,13 +1890,13 @@ void
 CMultiMain::CreateChannels()
 {
 	//===channel
-	YansWifiChannelHelper wChannelHelper;
+	YansWifiChannelHelper channelHelper;
 	WAVEChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
 	WAVEChannel.AddPropagationLoss("ns3::RangePropagationLossModel", "MaxRange",
 				DoubleValue(range));
 
 	// the channelg
-	Ptr<YansWifiChannel> waveChannel = wChannelHelper.Create();
+	Ptr<YansWifiChannel> waveChannel = channelHelper.Create();
 
 	//===wifiphy
 	YansWifiPhyHelper wavePhy =  YansWifiPhyHelper::Default ();
@@ -1942,15 +1906,15 @@ CMultiMain::CreateChannels()
 	wavePhy.Set ("TxPowerEnd", DoubleValue (txp));
 
 	// 802.11p mac
-	NqosWaveMacHelper CCH80211pMac = NqosWaveMacHelper::Default ();
+	NqosWaveMacHelper waveMac = NqosWaveMacHelper::Default ();
 
 	Wifi80211pHelper waveHelper = Wifi80211pHelper::Default ();
 	waveHelper.SetRemoteStationManager ("ns3::ConstantRateWifiManager",
 											"DataMode",StringValue (phyMode),
 											"ControlMode",StringValue (phyMode));
 
-	m_VehDevices = waveHelper.Install(wavePhy, wifi80211pMac, m_vehicles);
-	m_ConDevices = waveHelper.Install(wavePhy, wifi80211pMac, m_controllers);
+	m_VehDevices = waveHelper.Install(wavePhy, waveMac, m_vehicles);
+	m_ConDevices = waveHelper.Install(wavePhy, waveMac, m_controllers);
 
 	CsmaHelper csma;
 	csma.SetChannelAttribute ("DataRate", StringValue ("100Mbps"));
@@ -1982,16 +1946,35 @@ CMultiMain::InstallInternetStack ()
 }
 
 
+
+void
+CMultiMain::CourseChange (std::string foo, Ptr<const MobilityModel> mobility)
+{
+   Vector pos = mobility->GetPosition ();
+
+   if( util.isEnteringWaitingArea (pos)) {
+       std::vector<std::string> ret;
+       util.split (foo, ret, '/');
+       vehicle veh = vec_vehicles[atoi(ret[1].c_str())]; //get the vehicle node id and the vehicle object
+       uint32_t currentIndex = veh.curPath;
+       if(currentIndex + 1 < veh.paths.size ()) {  //the current index is not the last one of paths
+           enterAndRequest(mobility, veh, currentIndex, pos);
+         }
+       else
+         break;
+   }
+   std::cout << Simulator::Now () << ", model=" << mobility << ", POS: x=" << pos.x << ", y=" << pos.y
+   << ", z=" << pos.z << std::endl;
+}
+
 void
 CMultiMain::ConfigMobility()
 {
 	//here we will set the position of vehicles and set their mobility model
 	std::vector<Ptr<MobilityModel> > mobilityStack;
-//	bool lazyNotify = true;
 
 	ObjectFactory mobilityFactory;
 	mobilityFactory.SetTypeId ("ns3::WaypointMobilityModel");
-//	mobilityFactory.Set ("LazyNotify", BooleanValue (lazyNotify));
 
 	// Populate the vector of mobility models.
 	for (uint32_t i = 0; i < vehNum; i++)
@@ -2019,18 +2002,9 @@ CMultiMain::ConfigMobility()
 
 	    double travel = util.travelTime (initPos, (uint32_t)atoi(tmp_vec[3].c_str()), speed_idle);
 	    wpt.time += travel;
-	    wpt.position.x = initPos.x;
-	    wpt.position.y = initPos.y;
+	    wpt.position = initPos;
 	    mob->AddWaypoint (wpt);
 	    m_vehicles.Get(im)->AggregateObject(mob);
-
-	    //init the path of vehicles
-	    vehicle tmp_v = vec_vehicles[im];
-	    tmp_v.curPath = 0;
-	    std::vector<uint32_t>::iterator vec_it2 = tmp_vec.begin ();
-	    for(it2 += 3; vec_it2 != tmp_vec.end (); vec_it2++) {  //+=3 to skip to the beginning of path
-		tmp_v.paths.push_back (atoi ((*it2).c_str()));
-	      }
 	  }
 
 	for(int i = 0; i < vehNum; i++) {
@@ -2065,12 +2039,24 @@ CMultiMain::ConfigMobility()
 
 
 void
-CMultiMain::SetupRoutingPacketReceive ()
+CMultiMain::SetUpApplication ()
 {
+  (const Ipv4InterfaceContainer &address, uint16_t port_send, uint32_t packetSize,
+                  uint32_t nPackets, DataRate dataRate, Ptr<WaypointMobilityModel> waypointModel,
+                  uint32_t v_id, std::vector<uint32_t> &traces, std::vector<intersection> &intersections5)
        uint16_t port_controller = 1024;
        for(uint32_t i = 0; i < vehNum; i++) {
+
+           //init the path of vehicles
+           vehicle tmp_v = vec_vehicles[i];
+           std::vector<uint32_t>::iterator vec_it2 = tmp_vec.begin ();
+           for(it2 += 3; vec_it2 != tmp_vec.end (); vec_it2++) {  //+=3 to skip to the beginning of path
+               tmp_v.paths.push_back (atoi ((*it2).c_str()));
+             }
+
            Ptr<vehicle> appVeh = CreateObject<vehicle> ();
-           appVeh->Setup (m_CSMAInterface, port_controller, 1024, 1, i, DataRate ("1Mbps"));
+           appVeh->Setup (m_CSMAInterface, port_controller, 1024, 1, DataRate ("1Mbps"),
+                          m_vehicles.Get(i)->GetObject<WaypointMobilityModel>(),i + 1, vec_intersections);
            m_vehicles.Get (i)->AddApplication (appVeh);
            appVeh->SetStartTime (Seconds (2.));
            appVeh->SetStopTime (Seconds (30));
@@ -2089,12 +2075,10 @@ CMultiMain::SetupRoutingPacketReceive ()
 
 void CMultiMain::Run()
 {
-	Simulator::Schedule(Seconds(0.0), &CMultiMain::Look_at_clock, this);
 	std::cout << "Starting simulation for " << duration << " s ..."<< std::endl;
 	Simulator::Stop(Seconds(duration));
 	Simulator::Run();
 	Simulator::Destroy();
-
 }
 
 
@@ -2134,197 +2118,12 @@ void CMultiMain::enterAndRequest(Ptr<const MobilityModel> mobility, vehicle &veh
     }
 }
 
-// Example to use ns2 traces file in ns3
+
 int main (int argc, char *argv[])
 {
 	CMultiMain SDN_test;
 	SDN_test.Simulate(argc, argv);
 	return 0;
-}
-
-
-
-
-/****************************************************************************************/
-
-
-int
-main (int argc, char *argv[])
-{
-
-  bool verbose = true;
-  bool tracing = false;
-
-  CommandLine cmd;
-  cmd.AddValue ("verbose", "Tell echo applications to log if true", verbose);
-  cmd.AddValue ("tracing", "Enable pcap tracing", tracing);
-
-  cmd.Parse (argc,argv);
-
-  // Check for valid number of csma or wifi nodes
-  // 250 should be enough, otherwise IP addresses
-  // soon become an issue
-
-  if (verbose)
-    {
-      LogComponentEnable ("UdpEchoClientApplication", LOG_LEVEL_INFO);
-      LogComponentEnable ("UdpEchoServerApplication", LOG_LEVEL_INFO);
-    }
-
-  NodeContainer m_vehicles, m_controllers;
-  uint32_t vehNum = 15, conNum = 5;
-  m_vehicles.Create( vehNum );//Cars
-  m_controllers.Create ( conNum );
-  /*Only Apps Are Different Between Different kind of Nodes*/
-  // Name nodes
-//  for (uint32_t i = 0; i < vehNum; ++i)
-//  {
-//          std::ostringstream os;
-//          os << "vehicle-" << i;
-//          Names::Add(os.str(), m_vehicles.Get(i));
-//  }
-//  for (uint32_t i = 0; i < conNum; ++i)
-//  {
-//          std::ostringstream os;
-//          os << "controller-" << i;
-//          Names::Add(os.str(), m_vehicles.Get(i));
-//  }
-
-  //===channel
-  YansWifiChannelHelper CCHChannel = YansWifiChannelHelper::Default ();
-  CCHChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
-  CCHChannel.AddPropagationLoss("ns3::RangePropagationLossModel", "MaxRange",
-                          DoubleValue(1200.0));
-  Ptr<YansWifiChannel> CCH = CCHChannel.Create();
-
-  //===wifiphy
-  YansWifiPhyHelper wavePhy =  YansWifiPhyHelper::Default ();
-  wavePhy.SetChannel (CCH);
-  wavePhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11);
-  wavePhy.Set ("TxPowerStart",DoubleValue (20));
-  wavePhy.Set ("TxPowerEnd", DoubleValue (20));
-
-////  // 802.11p mac
-  NqosWaveMacHelper wifi80211pMac = NqosWaveMacHelper::Default ();
-
-  Wifi80211pHelper waveHelper = Wifi80211pHelper::Default ();
-  waveHelper.SetRemoteStationManager ("ns3::ConstantRateWifiManager",
-                                                                                    "DataMode",StringValue ("OfdmRate6MbpsBW10MHz"),
-                                                                                    "ControlMode",StringValue ("OfdmRate6MbpsBW10MHz"));
-
-
-//  YansWifiPhyHelper wavePhy = YansWifiPhyHelper::Default ();
-//  YansWifiChannelHelper wifiChannel = YansWifiChannelHelper::Default ();
-//  wavePhy.SetChannel (wifiChannel.Create ());
-//  NqosWaveMacHelper wifi80211pMac = NqosWaveMacHelper::Default ();
-//  Wifi80211pHelper waveHelper = Wifi80211pHelper::Default ();
-
-//  Ssid ssid = Ssid ("ns-3-ssid");
-//  wifi80211pMac.SetType ("ns3::StaWifiMac",
-//               "Ssid", SsidValue (ssid),
-//               "ActiveProbing", BooleanValue (false));
-
-  NetDeviceContainer m_VehDevices;
-  m_VehDevices = waveHelper.Install(wavePhy, wifi80211pMac, m_vehicles);
-
-//  wifi80211pMac.SetType ("ns3::ApWifiMac",
-//               "Ssid", SsidValue (ssid));
-  NetDeviceContainer m_ConDevices;
-  m_ConDevices = waveHelper.Install(wavePhy, wifi80211pMac, m_controllers);
-
-  CsmaHelper csma;
-  csma.SetChannelAttribute ("DataRate", StringValue ("100Mbps"));
-  csma.SetChannelAttribute ("Delay", TimeValue (NanoSeconds (6560)));
-
-  NetDeviceContainer m_CSMADevices;
-  m_CSMADevices = csma.Install (m_controllers);
-
-  InternetStackHelper stack;
- // stack.SetRoutingHelper(aodv);
-  stack.Install (m_vehicles);
-  stack.Install (m_controllers);
-
-  Ipv4InterfaceContainer m_VehInterface, m_ConInterface, m_CSMAInterface;
-  Ipv4AddressHelper address;
-  NS_LOG_INFO ("Assign IP Addresses.");
-  address.SetBase ("10.1.0.0", "255.255.0.0");
-  m_VehInterface = address.Assign (m_VehDevices);
-  m_ConInterface = address.Assign (m_ConDevices);
-
-  address.SetBase ("10.2.0.0", "255.255.0.0");
-  m_CSMAInterface = address.Assign (m_CSMADevices);
-
-
-
-
-    MobilityHelper mobility;
-
-    mobility.SetPositionAllocator ("ns3::GridPositionAllocator",
-                                   "MinX", DoubleValue (0.0),
-                                   "MinY", DoubleValue (0.0),
-                                   "DeltaX", DoubleValue (5.0),
-                                   "DeltaY", DoubleValue (10.0),
-                                   "GridWidth", UintegerValue (11),
-                                   "LayoutType", StringValue ("RowFirst"));
-
-    mobility.SetMobilityModel ("ns3::RandomWalk2dMobilityModel",
-                               "Bounds", RectangleValue (Rectangle (-50, 50, -50, 50)));
-    mobility.Install (m_vehicles);
-
-    mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
-    mobility.Install (m_controllers);
-
-
-//    UdpEchoServerHelper echoServer (9);
-
-//    ApplicationContainer serverApps = echoServer.Install (m_controllers.Get (3));
-//    serverApps.Start (Seconds (1.0));
-//    serverApps.Stop (Seconds (10.0));
-
-//    UdpEchoClientHelper echoClient (m_CSMAInterface.GetAddress (3), 9);
-//    echoClient.SetAttribute ("MaxPackets", UintegerValue (1));
-//    echoClient.SetAttribute ("Interval", TimeValue (Seconds (1.0)));
-//    echoClient.SetAttribute ("PacketSize", UintegerValue (1024));
-
-//    ApplicationContainer clientApps =
-//      echoClient.Install (m_vehicles.Get (1));
-//    clientApps.Start (Seconds (2.0));
-//    clientApps.Stop (Seconds (10.0));
-
-
-    uint16_t port_controller = 1024;
-    for(uint32_t i = 0; i < vehNum; i++) {
-        Ptr<vehicle> appVeh = CreateObject<vehicle> ();
-        appVeh->Setup (m_CSMAInterface, port_controller, 1024, 1, i, DataRate ("1Mbps"));
-        m_vehicles.Get (i)->AddApplication (appVeh);
-        appVeh->SetStartTime (Seconds (2.));
-        appVeh->SetStopTime (Seconds (30));
-        std::cout << "init app of vehicles" << std::endl;
-      }
-
-    for(uint32_t i = 0; i < conNum; i++) {
-        Ptr<intersection> appCon = CreateObject<intersection> ();
-        m_controllers.Get (i)->AddApplication (appCon);
-        appCon->SetStartTime (Seconds (1.));
-        appCon->SetStopTime (Seconds (30));
-        std::cout << "init app of controllers" << std::endl;
-      }
-
-
-
-    Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
-
-    Simulator::Stop (Seconds (30.0));
-
-    if (tracing == true)
-      {
-        wavePhy.EnablePcap ("testnet", m_VehDevices.Get (3));
-        wavePhy.EnablePcap ("testnet", m_ConDevices.Get (3));
-      }
-
-    Simulator::Run ();
-    Simulator::Destroy ();
-    return 0;
 }
 
 
