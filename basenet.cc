@@ -1113,6 +1113,7 @@ intersection::StartApplication (void)
       m_socket_accept = Socket::CreateSocket (GetNode (), tid);
       InetSocketAddress local = InetSocketAddress (Ipv4Address::GetAny (), m_port_accept);
       m_socket_accept->Bind (local);
+      std::cout << "intersection " << intersection_id << " set accept address" << std::endl;
     }
   m_socket_accept->SetRecvCallback (MakeCallback (&intersection::HandleRead, this));
 }
@@ -1280,7 +1281,7 @@ intersection::HandleRead (Ptr<Socket> socket)
                     rp predict_vehile = {ve_id, la_id, 8, 8, false, time, 0, 0};
                     pending.push_back (predict_vehile);
                     pre_num--;
-                    std::cout << "lane " << la_id << ", vehicle"<< ve_id << " are predicted to arrive at " << time << std::endl;
+                    std::cout << "lane " << la_id << ", vehicle "<< ve_id << " are predicted to arrive at " << time << std::endl;
                   }
 
                 packet->RemoveAllPacketTags ();
@@ -1539,6 +1540,7 @@ intersection::sendPredict( uint32_t lane, uint32_t num, uint32_t next_inter) {
               seqTss.SetSeq (it->vehicle_id);
               packet->AddHeader (seqTss);
               num--;
+              std::cout << "$$$$ " <<  it->vehicle_id << std::endl;
             }
         }
 
@@ -1725,7 +1727,7 @@ vehicle::Begin(void)
       m_socket_accept = Socket::CreateSocket (GetNode (), tid);
       InetSocketAddress local = InetSocketAddress (Ipv4Address::GetAny (), m_port_accept);
       m_socket_accept->Bind (local);
-      std::cout << "set the accept address" << std::endl;
+      std::cout << "vehicle " << vehicle_id << " set the accept address" << std::endl;
     }
    m_socket_accept->SetRecvCallback (MakeCallback (&vehicle::HandleRead, this));
 }
@@ -1768,6 +1770,8 @@ vehicle::HandleRead (Ptr<Socket> socket)
                   std::cout << "vehicle " << m_last_id << " is the last permitted vehicle in the list" << std::endl;
                   last = true;
                 }
+              packet->RemoveHeader (seqTss);
+              pass_num = seqTss.GetSeq ();
               double t_last;
               while(pass_num) {
                   packet->RemoveHeader (seqTss);
@@ -1870,7 +1874,6 @@ vehicle::HandleRead (Ptr<Socket> socket)
 void
 vehicle::sendRequest()
 {
-      m_socket_send = 0;
       Ptr<Packet> packet = Create<Packet> (m_packetSize);
       SeqTsHeader seqTss;
 
@@ -1900,6 +1903,8 @@ vehicle::sendRequest()
           begin = false;
         }
       intersection_id = util.whichIntersection (paths[path_index]);
+      if(intersection_id == 8)
+        return;
       lane_id = util.whichLane (util.whichWaitingArea (paths[path_index]), util.whichWaitingArea (paths[path_index + 1]));
       setConnectSocket (intersection_id);
       uint32_t next_inter = intersection_id;
@@ -1924,9 +1929,9 @@ vehicle::sendRequest()
       seqTss.SetSeq (1);
       packet->AddHeader (seqTss);
 
-      m_socket_send->Send (packet);
+      int success = m_socket_send->Send (packet);
 
-      std::cout << "~~~~~~~~~~~~x:" << x << " y:" << y << "  now: " << Simulator::Now ().GetSeconds () << std::endl;
+      std::cout << success << "~~~~~~~~~~~~x:" << x << " y:" << y << "  now: " << Simulator::Now ().GetSeconds () << std::endl;
       //the vehicle will move to the intersection
       double next_x = x;
       double next_y = y;
@@ -1940,14 +1945,14 @@ vehicle::sendRequest()
       mobility->AddWaypoint (wpt);
 
       std::cout << "x:" << next_x << " y:" << next_y << " time:" << time << "  " << mobility->GetVelocity ().y << std::endl;
-      std::cout << "vehicle " << vehicle_id << " at intersection " << intersection_id << " send request" << std::endl;
+      std::cout << "vehicle " << vehicle_id << " at intersection " << intersection_id << " send request"<< std::endl;
 }
 
 
 void
 vehicle::sendUnlock ()
 {
-      setConnectSocket(intersection_id);
+//      setConnectSocket(intersection_id);
       Ptr<Packet> packet = Create<Packet> (m_packetSize);
       SeqTsHeader seqTss;
 
@@ -1964,6 +1969,10 @@ vehicle::sendUnlock ()
 void
 vehicle::setConnectSocket(uint32_t inter)
 {
+      if(m_socket_send != 0) {
+          m_socket_send->Close ();
+          m_socket_send = 0;
+        }
       Ipv4Address address;
       if(inter <= 5 )
         address = m_CSMAInterface.GetAddress (inter - 1);
@@ -2346,20 +2355,20 @@ CMultiMain::SetUpApplication ()
       for(uint32_t i = 0; i < conNum; i++) {
           Ptr<intersection> appCon = CreateObject<intersection> ();
           vec_ptr_inter.push_back (appCon);
-          appCon->SetUp (m_CSMAInterface, i + 1);
+          appCon->SetUp (m_CSMAInterface,i + 1);
           m_controllers.Get (i)->AddApplication (appCon);
           appCon->SetStartTime (Seconds (1.));
-          appCon->SetStopTime (Seconds (30));
+          appCon->SetStopTime (Seconds (duration));
           std::cout << "init app of controllers"  << i << std::endl;
         }
 
        for(uint32_t i = 0; i < vehNum; i++) {
            Ptr<vehicle> appVeh = CreateObject<vehicle> ();
-           appVeh->Setup (m_CSMAInterface, port_controller, 1024, DataRate ("1Mbps"),
+           appVeh->Setup (m_ConInterface, port_controller, 1024, DataRate ("1Mbps"),
                           m_vehicles.Get(i)->GetObject<WaypointMobilityModel>(), i + 1, vec_vec_uint_path[i], vec_ptr_inter);
            m_vehicles.Get (i)->AddApplication (appVeh);
-           appVeh->SetStartTime (Seconds (2.));
-           appVeh->SetStopTime (Seconds (30));
+           appVeh->SetStartTime (Seconds (1.));
+           appVeh->SetStopTime (Seconds (duration));
            std::cout << "init app of vehicles" << i << std::endl;
          }
 }
