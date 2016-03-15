@@ -36,6 +36,7 @@
 #include <fstream>
 #include <iostream>
 #include <dirent.h>
+#include <stdlib.h>
 
 using namespace ns3;
 
@@ -51,6 +52,13 @@ typedef struct rpList {
   double x;
   double y;
 }rp;
+
+typedef struct pos {
+  uint32_t vehicle_id;
+  uint8_t  direction; // 1:y-; 2:x+;3:x-;4:y+;
+  double   time_send;
+  double   time_need;
+}pos_unit;
 
 /*****************************************************************************************************/
 class Utils
@@ -695,56 +703,51 @@ Utils::travelTime(Vector &pos, const int nextWaiting, const double speed) const{
    double time;
    switch (lane) {
      case 0:
-       y -= 40.0;
+       switch (inter_id) {
+         case 1:
+          y = 2980.0;
+          break;
+         case 2:
+         case 4:
+         case 5:
+          y = 1940.0;
+          break;
+         case 3:
+          y = 900.0;
+          break;
+         default:
+           break;
+         }
        time = go_straight;
        break;
      case 1:
        switch (inter_id) {
          case 1:
-         case 3:
-         case 5:
            x = 1980.0;
+           y = 2990.0;
            break;
          case 2:
-           x = 3000.0;
+           x = 3020.0;
+           y = 1950.0;
+           break;
+         case 3:
+           x = 1980.0;
+           y = 910.0;
            break;
          case 4:
            x = 940.0;
+           y = 1950.0;
+           break;
+         case 5:
+           x = 1980.0;
+           y = 1950.0;
            break;
          default:
            break;
          }
-        y -= 25;
         time = turn_left;
        break;
      case 2:
-       x -= 40;
-       time = go_straight;
-       break;
-     case 3:
-       switch (inter_id) {
-         case 1:
-           y = 2980.0;
-           break;
-         case 2:
-         case 4:
-         case 5:
-           y = 1940.0;
-           break;
-         case 3:
-           y = 900.0;
-           break;
-         default:
-           break;
-         }
-       x -= 25;
-       time = turn_left;
-       break;
-     case 4:
-       y += 40;
-       time = go_straight;
-       break;
-     case 5:
        switch (inter_id) {
          case 1:
          case 3:
@@ -760,14 +763,36 @@ Utils::travelTime(Vector &pos, const int nextWaiting, const double speed) const{
          default:
            break;
          }
-       y += 25;
-       time = turn_left;
-       break;
-     case 6:
-       x += 40;
        time = go_straight;
        break;
-     case 7:
+     case 3:
+       switch (inter_id) {
+         case 1:
+           x = 1950.0;
+           y = 2980.0;
+           break;
+         case 2:
+           x = 2990.0;
+           y = 1940.0;
+           break;
+         case 3:
+           x = 1950.0;
+           y = 900.0;
+           break;
+         case 4:
+           x = 910.0;
+           y = 1940.0;
+           break;
+         case 5:
+           x = 1950.0;
+           y = 1940.0;
+           break;
+         default:
+           break;
+         }
+       time = turn_left;
+       break;
+     case 4:
        switch (inter_id) {
          case 1:
            y = 3020.0;
@@ -779,10 +804,82 @@ Utils::travelTime(Vector &pos, const int nextWaiting, const double speed) const{
            break;
          case 3:
            y = 940.0;
+           break;
          default:
            break;
          }
-       x += 25.0;
+       time = go_straight;
+       break;
+     case 5:
+       switch (inter_id) {
+         case 1:
+           x = 1940.0;
+           y = 3010.0;
+           break;
+         case 2:
+           x = 2980.0;
+           y = 1970.0;
+           break;
+         case 3:
+           x = 1940.0;
+           y = 930.0;
+           break;
+         case 4:
+           x = 900.0;
+           y = 1970.0;
+           break;
+         case 5:
+           x = 1940.0;
+           y = 1970.0;
+           break;
+         default:
+           break;
+         }
+       time = turn_left;
+       break;
+     case 6:
+       switch (inter_id) {
+         case 1:
+         case 3:
+         case 5:
+           x = 1980.0;
+           break;
+         case 2:
+           x = 3020.0;
+           break;
+         case 4:
+           x = 940.0;
+           break;
+         default:
+           break;
+         }
+       time = go_straight;
+       break;
+     case 7:
+       switch (inter_id) {
+         case 1:
+           x = 1970.0;
+           y = 3020.0;
+           break;
+         case 2:
+           x = 3010.0;
+           y = 1980.0;
+           break;
+         case 3:
+           x = 1970.0;
+           y = 940.0;
+           break;
+         case 4:
+           x = 930.0;
+           y = 1980.0;
+           break;
+         case 5:
+           x = 1970.0;
+           y = 1980.0;
+           break;
+         default:
+           break;
+         }
        time = turn_left;
        break;
      default:
@@ -799,63 +896,20 @@ Utils::travelTime(Vector &pos, const int nextWaiting, const double speed) const{
      case 1:
        switch (lane) {
          case 0:
+         case 3:
+           y = 2080.0;
+           break;
          case 1:
-           y = 2080;
+         case 6:
+           x = 2880.0;
            break;
          case 2:
-         case 3:
-           x = 1040;
-         case 4:
          case 5:
-           y = 3920;
-           break;
-         case 6:
-         case 7:
-           x = 3920;
-           break;
-         default:
-           break;
-         }
-       break;
-     case 5:
-       switch (lane) {
-         case 0:
-         case 1:
-           y = 1040;
-           break;
-         case 2:
-         case 3:
-           x = 1040;
+           x = 1040.0;
            break;
          case 4:
-         case 5:
-           y = 2880;
-           break;
-         case 6:
          case 7:
-           x = 2880;
-           break;
-         default:
-           break;
-         }
-       break;
-     case 3:
-       switch (lane) {
-         case 0:
-         case 1:
-           y = 0;
-           break;
-         case 2:
-         case 3:
-           x = 1040;
-           break;
-         case 4:
-         case 5:
-           y = 1840;
-           break;
-         case 6:
-         case 7:
-           x = 2880;
+           y = 3920.0;
            break;
          default:
            break;
@@ -864,20 +918,42 @@ Utils::travelTime(Vector &pos, const int nextWaiting, const double speed) const{
      case 2:
        switch (lane) {
          case 0:
+         case 3:
+           y = 1040.0;
+           break;
          case 1:
-           y = 1040;
+         case 6:
+           x = 3920.0;
            break;
          case 2:
-         case 3:
-           x = 2080;
+         case 5:
+           x = 2080.0;
            break;
          case 4:
-         case 5:
-           y = 2880;
-           break;
-         case 6:
          case 7:
-           x = 3920;
+           y = 2880.0;
+           break;
+         default:
+           break;
+         }
+       break;
+     case 3:
+       switch (lane) {
+         case 0:
+         case 3:
+           y = 0.0;
+           break;
+         case 1:
+         case 6:
+           x = 2880.0;
+           break;
+         case 2:
+         case 5:
+           x = 1040.0;
+           break;
+         case 4:
+         case 7:
+           y = 1840.0;
            break;
          default:
            break;
@@ -886,20 +962,42 @@ Utils::travelTime(Vector &pos, const int nextWaiting, const double speed) const{
      case 4:
        switch (lane) {
          case 0:
+         case 3:
+           y = 1040.0;
+           break;
          case 1:
-           y = 1040;
+         case 6:
+           x = 1840.0;
            break;
          case 2:
-         case 3:
-           x = 0;
+         case 5:
+           x = 0.0;
            break;
          case 4:
-         case 5:
-           y = 2880;
-           break;
-         case 6:
          case 7:
-           x = 1840;
+           y = 2880.0;
+           break;
+         default:
+           break;
+         }
+       break;
+     case 5:
+       switch (lane) {
+         case 0:
+         case 3:
+           y = 1040.0;
+           break;
+         case 1:
+         case 6:
+           x = 2880.0;
+           break;
+         case 2:
+         case 5:
+           x = 1040.0;
+           break;
+         case 4:
+         case 7:
+           y = 2880.0;
            break;
          default:
            break;
@@ -1074,6 +1172,7 @@ private:
   uint32_t s_packetSize;  //the size of packet
   Utils util; //tools
   std::vector<rp> pending;
+  std::vector<pos_unit> pos_helper;
   uint32_t intersection_id;  //the id of intersection
   Ipv4InterfaceContainer controllerAddress; //the container for addresses of vehicles
 };
@@ -1251,6 +1350,7 @@ intersection::HandleRead (Ptr<Socket> socket)
                   }
                 if(!pending.empty ()) {
                     uint32_t pass_lane = pending[0].lane_id;
+                    std::cout << "pass lane is " << pass_lane  << "   " <<pending[0].vehicle_id << std::endl;
                     uint32_t num = decideNum (pass_lane);  //how many vehicles are allowed to pass the intersection
                     sendPermit(pass_lane, num);
                     uint32_t next_inter = util.nextIntersection(pass_lane, intersection_id);
@@ -1269,9 +1369,9 @@ intersection::HandleRead (Ptr<Socket> socket)
 
                 while(pre_num != 0) {
                     packet->RemoveHeader (seqTss);
-                    la_id = seqTss.GetSeq ();
-                    packet->RemoveHeader (seqTss);
                     ve_id = seqTss.GetSeq ();
+                    packet->RemoveHeader (seqTss);
+                    la_id = seqTss.GetSeq ();
                     packet->RemoveHeader (seqTss);
                     t1 = seqTss.GetSeq ();
                     packet->RemoveHeader (seqTss);
@@ -1282,6 +1382,7 @@ intersection::HandleRead (Ptr<Socket> socket)
                     pending.push_back (predict_vehile);
                     pre_num--;
                     std::cout << "lane " << la_id << ", vehicle "<< ve_id << " are predicted to arrive at " << time << std::endl;
+                    time = 0;
                   }
 
                 packet->RemoveAllPacketTags ();
@@ -1327,11 +1428,10 @@ intersection::updateRP(uint32_t vehicle, uint32_t lane, uint32_t next_lane, uint
         }
     }
 
-
-
   if(!recorded) // vehicle has not been recorded and scheduled
     {
       rp tmp = {vehicle, lane, next_lane, next_inter, false, 0, x, y};
+      std::cout << "push back stack " << vehicle << "  " << lane << std::endl;
       pending.push_back (tmp);
     }
 
@@ -1349,12 +1449,35 @@ intersection::updateRP(uint32_t vehicle, uint32_t lane, uint32_t next_lane, uint
       it->x = x;
       it->y = y;
     }
-//  double tmp_x = x, tmp_y = y;
-//  double pass_time = util.passIntersectionWait (tmp_x, tmp_y);
-//  for(double i = 0.1; i < pass_time; i += 0.1) {
-
-//    }
   return false;
+}
+
+bool
+intersection::updatePosHelper(uint32_t veh_id, uint32_t lane, double time_left) {
+  uint8_t direction;
+  double now = Simulator::Now ().GetSeconds ();
+  switch (lane) {
+    case 0:
+    case 3:
+      direction = 1;    //y-
+      break;
+    case 1:
+    case 6:
+      direction = 2;    //x+
+      break;
+    case 2:
+    case 5:
+      direction = 3;    //x-
+      break;
+    case 4:
+    case 7:
+      direction = 4;    //y+
+      break;
+    default:
+      break;
+    }
+  pos_unit unit = {veh_id, direction, now, time_left};
+  pos_helper.push_back (unit);
 }
 
 /**
@@ -1783,14 +1906,16 @@ vehicle::HandleRead (Ptr<Socket> socket)
 
                       std::cout << Simulator::Now ().GetSeconds () << "s  (" << pos.x << "," << pos.y << ") "  << std::endl;
                       Waypoint next_point = mobility->GetNextWaypoint ();
-                      std::cout << next_point.position.x << " <><><><>  " << next_point.position.y << next_point.time.GetSeconds ()<< std::endl;
+                      std::cout << next_point.position.x << " <><><><>  " << next_point.position.y << "   "<< next_point.time.GetSeconds ()<< std::endl;
                       //schedule the vehicle to pass the intersection
+                      std::cout << lane_id << "  " << vehicle_id << std::endl;
 
                       double time = 0;
                       double tmp_t = 0;
                       bool flag = true;
+                      bool pass_head = false;
                       Vector now_pos = pos;
-                      if(next_point.time > Simulator::Now().GetSeconds ()) {  //the vehicle get the privilege to pass immediately
+                      if(next_point.time.GetSeconds () > Simulator::Now().GetSeconds ()) {  //the vehicle get the privilege to pass immediately
                           Vector next_pos = next_point.position;
                           util.passIntersectionWait (lane_id, intersection_id, now_pos.x, now_pos.y);
                           if(!(util.doubleEquals (next_pos.x, now_pos.x) && util.doubleEquals (next_pos.y, now_pos.y)))  //the destination of vehicle isn't the edge of core
@@ -1802,6 +1927,7 @@ vehicle::HandleRead (Ptr<Socket> socket)
                             }
                           else {  //the destination of vehicle is at edge
                               std::cout << "+++++++++++++++++++++++" << std::endl;
+                              pass_head = true;
                               flag = false;
                             }
                         }
@@ -1821,16 +1947,19 @@ vehicle::HandleRead (Ptr<Socket> socket)
                       std::cout << tmp_t << "s later (" << pos.x << "," << pos.y << ")" << std::endl;
 
                       time = util.passIntersectionCore (lane_id, intersection_id, pos.x, pos.y);
+                      if(vehicle_id == 4) {
+                          std::cout << pos.x << " asdfg " <<  pos.y << std::endl;
+                        }
                       if(flag) {
                         tmp_t += time;
                         std::cout << "==============3===========   " << tmp_t <<std::endl;
                         }
-                      else if(util.doubleEquals (tmp_t, time +Simulator::Now ().GetSeconds ())) {
-                        tmp_t = time +Simulator::Now ().GetSeconds ();
+                      else if(pass_head) {
+                        tmp_t = time + mobility->GetNextWaypoint ().time.GetSeconds ();
                         std::cout << "==============4===========   " << tmp_t <<std::endl;
                         }
-                      else {
-                        tmp_t = time + mobility->GetNextWaypoint ().time.GetSeconds ();
+                      else{
+                        tmp_t = time + Simulator::Now ().GetSeconds ();
                         std::cout << "==============5===========   " << mobility->GetNextWaypoint ().time.GetSeconds () <<std::endl;
                         }
                       std::cout << "==============2===========   " << tmp_t <<std::endl;
@@ -1850,6 +1979,9 @@ vehicle::HandleRead (Ptr<Socket> socket)
                         }
 
                       time = util.passIntersectionIdle (lane_id, intersection_id, pos.x, pos.y);
+                      if(vehicle_id == 4) {
+                          std::cout << "asdf " << intersection_id << "  " << lane_id << " "  << pos.x << "  " << pos.y << std::endl;
+                        }
                       tmp_t += time;
                       wpt.position = pos;
                       std::cout << "********************* " << tmp_t << " x:" << pos.x << " y: " << pos.y << std::endl;
@@ -1903,8 +2035,13 @@ vehicle::sendRequest()
           begin = false;
         }
       intersection_id = util.whichIntersection (paths[path_index]);
-      if(intersection_id == 8)
-        return;
+      if(intersection_id == 8) {
+          x += rand()/50;
+          y += rand()/50;
+          Waypoint ran(Seconds (Simulator::Now ().GetSeconds () + 0.1), Vector(x, y, 0));
+          mobility->AddWaypoint (ran);
+          return;
+        }
       lane_id = util.whichLane (util.whichWaitingArea (paths[path_index]), util.whichWaitingArea (paths[path_index + 1]));
       setConnectSocket (intersection_id);
       uint32_t next_inter = intersection_id;
