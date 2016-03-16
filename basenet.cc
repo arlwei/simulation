@@ -81,7 +81,7 @@ public:
   uint32_t   whichWaitingArea(uint32_t) const;
   uint32_t   whichLane(uint32_t enterArea, uint32_t leavingArea);
   double     predictTime(uint32_t lane, uint32_t inter, double x, double y);
-  void       getPosition(uint32_t lane,uint32_t inter_id,uint32_t count,double &x,double &y);
+  double     getPosition(uint32_t lane,uint32_t inter_id,uint32_t count,double &x,double &y);
   double     passIntersectionWait(uint32_t lane, uint32_t inter_id, double &x, double &y);
   double     passIntersectionCore(uint32_t lane, uint32_t inter_id, double &x, double &y);
   double     passIntersectionIdle(uint32_t lane, uint32_t inter_id, double &x, double &y);
@@ -419,9 +419,10 @@ Utils::travelTime(Vector &pos, const int nextWaiting, const double speed) const{
   * @param y
   * get the coordinate of new comer when there are "count" vehicles ahead of it.
   */
- void
+ double
  Utils::getPosition(uint32_t lane,uint32_t inter_id,uint32_t count,double &x,double &y) {
    double queue_length = count * space_occupy;
+   double tmp_x = x, tmp_y = y;
    switch (inter_id) {
      case 1:
        switch (lane) {
@@ -536,6 +537,7 @@ Utils::travelTime(Vector &pos, const int nextWaiting, const double speed) const{
      default:
        break;
      }
+   return ((fabs(x - tmp_x) + fabs(y - tmp_y))/speed_waiting);
  }
 
 
@@ -1160,6 +1162,7 @@ private:
           bool needPredict(Ipv4Address &address, uint32_t next_inter);
           void setSendSocket(Ipv4Address &address, uint16_t port);
           void removeVehicle(uint32_t lane, uint32_t num);
+          void updatePosHelper(uint32_t veh_id, uint32_t lane, double time_left);
           uint32_t  decideNum(uint32_t lane);
 
 
@@ -1175,6 +1178,10 @@ private:
   std::vector<pos_unit> pos_helper;
   uint32_t intersection_id;  //the id of intersection
   Ipv4InterfaceContainer controllerAddress; //the container for addresses of vehicles
+  double speed_waiting;
+  double speed_idle;
+  double wait_area_length;
+  double idle_area_length;
 };
 
 
@@ -1190,7 +1197,10 @@ intersection::intersection ()
     m_port_send = 9;
     s_packetSize = 128;
     m_pass = 0;
-
+    speed_waiting = 12;
+    speed_idle = 20;
+    wait_area_length = 100;
+    idle_area_length = 800;
     for(int i = 0;i < 8;i++)
         s_lock[i] = false;  //init the locks.
 }
@@ -1408,6 +1418,7 @@ intersection::updateRP(uint32_t vehicle, uint32_t lane, uint32_t next_lane, uint
   std::cout << "update request pending list" << std::endl;
   std::cout << "Controller " << intersection_id << " recieve a request message from vehicle " << vehicle << " on lane " << lane << std::endl;
   bool recorded = false; //the vehicle has been predicted
+  double time_remain = 0; //the time that vehicle need to arrive at tail of waiting queue
   std::vector<rp>::iterator it;
   for(it = pending.begin (); it != pending.end (); it++) {
       if(vehicle == it->vehicle_id) {
@@ -1418,6 +1429,8 @@ intersection::updateRP(uint32_t vehicle, uint32_t lane, uint32_t next_lane, uint
                         last = false;
                       }
                   }
+                time_remain = wait_area_length/speed_waiting;
+                updatePosHelper (vehicle, lane, time_remain);
                 return true;
               }
             recorded = true; //recorded
@@ -1444,7 +1457,8 @@ intersection::updateRP(uint32_t vehicle, uint32_t lane, uint32_t next_lane, uint
         }
     }
   //set the coordinate of vehicle
-  util.getPosition(lane, intersection_id, count, x, y);
+  time_remain = util.getPosition(lane, intersection_id, count, x, y);
+  updatePosHelper (vehicle, lane, time_remain);
   for(it = pending.begin (); it != pending.end () && it->vehicle_id == vehicle; it++) {
       it->x = x;
       it->y = y;
@@ -1452,7 +1466,7 @@ intersection::updateRP(uint32_t vehicle, uint32_t lane, uint32_t next_lane, uint
   return false;
 }
 
-bool
+void
 intersection::updatePosHelper(uint32_t veh_id, uint32_t lane, double time_left) {
   uint8_t direction;
   double now = Simulator::Now ().GetSeconds ();
@@ -1584,15 +1598,27 @@ void
 intersection::sendPredict (uint32_t veh_id, uint32_t lane_id, uint32_t next_lane, uint32_t next_inter, double x, double y) {
   Ipv4Address address;
   bool flag = needPredict (address, next_inter);    //some lanes may not need to be predicted
+  double time = 0.0;
+  double now = Simulator::Now ().GetSeconds ();
 
   if(flag) {
       setSendSocket(address, m_port_accept);
       Ptr<Packet> packet = Create<Packet> (s_packetSize);
       SeqTsHeader seqTss;
 
+      for(std::vector<pos_unit>::iterator it = pos_helper.begin (); it != pos_helper.end (); it++) {
+          if(it->vehicle_id == veh_id) {
+              if(now < it->time_send + it->time_need) {
+                  time += (it->time_send + it->time_need - now);
+                  pos_helper.erase (it);
+                  break;
+                }
+            }
+        }
+
       //transport time separatly, for example, 1.23s, 1 is t1, 230 is t2.
-      double time = util.predictTime (lane_id, intersection_id, x, y);
-      time += Simulator::Now ().GetSeconds ();
+      time += util.predictTime (lane_id, intersection_id, x, y);
+      time += now;
       uint32_t t1 = time;
       time -= (double)t1;
       uint32_t t2 = time * 1000.0;
@@ -1633,6 +1659,8 @@ intersection::sendPredict( uint32_t lane, uint32_t num, uint32_t next_inter) {
   std::cout << "vehicles at lane " << lane << " will start to pass the intersection" << std::endl;
   Ipv4Address address;
   bool flag = needPredict (address, next_inter);  //need to send predictive message?
+  double time = 0.0;
+  double now = Simulator::Now ().GetSeconds ();
 
   if(flag)
     {
@@ -1646,9 +1674,19 @@ intersection::sendPredict( uint32_t lane, uint32_t num, uint32_t next_inter) {
           if(it->lane_id == lane && util.doubleEquals (it->time, 0.0))  //some vehicles may appear in accident
             {
 
-              double time = util.predictTime (lane, intersection_id, it->x, it->y);
+              for(std::vector<pos_unit>::iterator it2 = pos_helper.begin (); it2 != pos_helper.end (); it2++) {
+                  if(it2->vehicle_id == it->vehicle_id) {
+                      if(now < it2->time_send + it2->time_need) {
+                          time += (it2->time_send + it2->time_need - now);
+                          pos_helper.erase (it2);
+                          break;
+                        }
+                    }
+                }
+
+              time += util.predictTime (lane, intersection_id, it->x, it->y);
               std::cout << it->y << "=========================================================================" << time << std::endl;
-              time += Simulator::Now ().GetSeconds ();
+              time += now;
               uint32_t t1 = time;
               time -= (double)t1;
               uint32_t t2 = time * 1000.0;
