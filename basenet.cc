@@ -48,9 +48,10 @@ typedef struct rpList {
   uint32_t next_lane_id;
   uint32_t next_inter_id;
   bool pass;
-  double time;
+  bool arrive;  //if vehicle has arrvived
   double x;
   double y;
+  double arrive_time;
 }rp;
 
 typedef struct pos {
@@ -1388,7 +1389,7 @@ intersection::HandleRead (Ptr<Socket> socket)
                     t2 = seqTss.GetSeq ();
                     time = double(t2)/1000.0;
                     time += t1;
-                    rp predict_vehile = {ve_id, la_id, 8, 8, false, time, 0, 0};
+                    rp predict_vehile = {ve_id, la_id, 8, 8, false, false, 0, 0, time};
                     pending.push_back (predict_vehile);
                     pre_num--;
                     std::cout << "lane " << la_id << ", vehicle "<< ve_id << " are predicted to arrive at " << time << std::endl;
@@ -1436,14 +1437,15 @@ intersection::updateRP(uint32_t vehicle, uint32_t lane, uint32_t next_lane, uint
             recorded = true; //recorded
             it->next_lane_id = next_lane;
             it->next_inter_id = next_inter;
-            it->time = 0; //0 means the vehicle has arrived at this intersection
+            it->arrive = true; //true means the vehicle has arrived at this intersection
+            it->arrive_time = Simulator::Now ().GetSeconds ();
             break;
         }
     }
 
   if(!recorded) // vehicle has not been recorded and scheduled
     {
-      rp tmp = {vehicle, lane, next_lane, next_inter, false, 0, x, y};
+      rp tmp = {vehicle, lane, next_lane, next_inter, false, true, x, y, Simulator::Now().GetSeconds ()};
       std::cout << "push back stack " << vehicle << "  " << lane << std::endl;
       pending.push_back (tmp);
     }
@@ -1452,7 +1454,7 @@ intersection::updateRP(uint32_t vehicle, uint32_t lane, uint32_t next_lane, uint
   //calculate how many vehicles are ahead of the newcomer
   uint32_t count = 0;
   for(it = pending.begin (); it != pending.end (); it++) {
-      if(it->lane_id == lane && util.doubleEquals (it->time, 0) && it->vehicle_id != vehicle) {
+      if(it->lane_id == lane && it->arrive && it->vehicle_id != vehicle) {
           count++;
         }
     }
@@ -1552,7 +1554,7 @@ intersection::sendPermit ( uint32_t lane, uint32_t num) {
   std::vector<rp>::iterator it;
 
   for(it = pending.begin (); it != pending.end () && num > 0; it++) {
-      if(it->lane_id == lane && util.doubleEquals (it->time, 0.0))  //some vehicles may appear in accident
+      if(it->lane_id == lane && it->arrive)  //some vehicles may appear in accident
         {
 
           seqTss.SetSeq (it->vehicle_id);
@@ -1569,7 +1571,7 @@ intersection::sendPermit ( uint32_t lane, uint32_t num) {
   packet->AddHeader (seqTss);
 
   for(it = pending.begin (); it != pending.end () && num > 0; it++) {
-      if(it->lane_id == lane && !(util.doubleEquals (it->time, 0.0))) //some vehicles may be the predicted vehicles
+      if(it->lane_id == lane && !(it->arrive)) //some vehicles may be the predicted vehicles
         {
           std::cout << "have predicted vehicles" << std::endl;
           it->pass = true;  //this means vehicles are scheduled to pass the intersection
@@ -1627,8 +1629,6 @@ intersection::sendPredict (uint32_t veh_id, uint32_t lane_id, uint32_t next_lane
       seqTss.SetSeq (t1);
       packet->AddHeader (seqTss);
 
-      std::cout << "=========================================================================" << t1 << std::endl;
-
       seqTss.SetSeq (next_lane);
       packet->AddHeader (seqTss);
 
@@ -1671,7 +1671,7 @@ intersection::sendPredict( uint32_t lane, uint32_t num, uint32_t next_inter) {
       uint32_t count = num;
 
       for(it = pending.begin (); it != pending.end () && num > 0; it++) {
-          if(it->lane_id == lane && util.doubleEquals (it->time, 0.0))  //some vehicles may appear in accident
+          if(it->lane_id == lane && it->arrive)  //some vehicles may appear in accident
             {
 
               for(std::vector<pos_unit>::iterator it2 = pos_helper.begin (); it2 != pos_helper.end (); it2++) {
@@ -1685,7 +1685,6 @@ intersection::sendPredict( uint32_t lane, uint32_t num, uint32_t next_inter) {
                 }
 
               time += util.predictTime (lane, intersection_id, it->x, it->y);
-              std::cout << it->y << "=========================================================================" << time << std::endl;
               time += now;
               uint32_t t1 = time;
               time -= (double)t1;
@@ -1694,7 +1693,6 @@ intersection::sendPredict( uint32_t lane, uint32_t num, uint32_t next_inter) {
               packet->AddHeader (seqTss);
               seqTss.SetSeq (t1);
               packet->AddHeader (seqTss);
-              std::cout << "=========================================================================" << t1 << std::endl;
 
               seqTss.SetSeq (it->next_lane_id);
               packet->AddHeader (seqTss);
@@ -1742,7 +1740,7 @@ void
 intersection::removeVehicle(uint32_t lane, uint32_t num) {
   std::vector<rp>::iterator it;
   for(it = pending.begin (); it!= pending.end ();) {
-      if(it->lane_id == lane && it->pass && util.doubleEquals (it->time, 0) && num > 0)
+      if(it->lane_id == lane && it->pass && it->arrive && num > 0)
         {
           pending.erase (it);
           num--;
@@ -1769,10 +1767,27 @@ intersection::setSendSocket(Ipv4Address &address, uint16_t port) {
 uint32_t
 intersection::decideNum(uint32_t lane) {
    uint32_t count = 0;
-   for(std::vector<rp>::iterator it = pending.begin (); it != pending.end (); it++) {
-       if( it->lane_id == lane && it->time < (Simulator::Now ().GetSeconds () + 5) )
+//   for(std::vector<rp>::iterator it = pending.begin (); it != pending.end (); it++) {
+//       if( it->lane_id == lane && it->time < (Simulator::Now ().GetSeconds () + 5) )
+//         count++;
+//     }
+   std::vector<rp>::iterator it;
+   double now = Simulator::Now ().GetSeconds ();
+   double average_waiting_time = 0.0;
+   for(it = pending.begin (); it != pending.end (); it++) {
+       if(it->lane_id == lane && it->arrive) {
          count++;
+         average_waiting_time += (now - it->arrive_time);
+         }
      }
+   if(count != 0)
+      average_waiting_time /= count;
+//   double last_time = 0.0;
+//   for(it = pending.begin (); it != pending.end (); i++) {
+//       //find the last vehicle in the predict list
+//       if(it->lane_id == lane && !(it->arrive))
+//         last_predict = it->arrive_time;
+//     }
    return count;
 }
 
@@ -2178,7 +2193,7 @@ vehicle::pos_xy(uint32_t lane, uint32_t inter_id, double &x, double &y, std::vec
   std::vector<rp> req_pending = intsect[inter_id - 1]->getPending();
   for(std::vector<rp>::iterator it = req_pending.begin ();
       it != req_pending.end (); it++) {
-      if(it->lane_id == lane && util.doubleEquals (it->time, 0)) {
+      if(it->lane_id == lane && it->arrive) {
           count++;
         }
     }
@@ -2552,6 +2567,7 @@ CMultiMain::SetUpApplication ()
 void CMultiMain::Run()
 {
 	std::cout << "Starting simulation for " << duration << " s ..."<< std::endl;
+	freopen("/home/wei/test/csim/multi1uniform.out", "w", stdout);
 	Simulator::Stop(Seconds(duration));
 	Simulator::Run();
 	Simulator::Destroy();
