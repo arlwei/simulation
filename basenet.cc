@@ -83,6 +83,7 @@ public:
   uint32_t   whichLane(uint32_t enterArea, uint32_t leavingArea);
   double     predictTime(uint32_t lane, uint32_t inter, double x, double y);
   double     getPosition(uint32_t lane,uint32_t inter_id,uint32_t count,double &x,double &y);
+  void       enterWaiting(uint32_t lane, uint32_t inter_id, double &x, double &y);
   double     passIntersectionWait(uint32_t lane, uint32_t inter_id, double &x, double &y);
   double     passIntersectionCore(uint32_t lane, uint32_t inter_id, double &x, double &y);
   double     passIntersectionIdle(uint32_t lane, uint32_t inter_id, double &x, double &y);
@@ -541,6 +542,209 @@ Utils::travelTime(Vector &pos, const int nextWaiting, const double speed) const{
    return ((fabs(x - tmp_x) + fabs(y - tmp_y))/speed_waiting);
  }
 
+ void
+ Utils::enterWaiting(uint32_t lane, uint32_t inter_id, double &x, double &y) {
+   switch (inter_id) {
+     case 1:
+       {
+         switch (lane) {
+           case 0:
+             x = 1945.0;
+             y = 3120.0;
+             break;
+           case 1:
+             x = 1955.0;
+             y = 3120.0;
+             break;
+           case 2:
+             x = 2080.0;
+             y = 3015.0;
+             break;
+           case 3:
+             x = 2080.0;
+             y = 3005.0;
+             break;
+           case 4:
+             x = 1975.0;
+             y = 2880.0;
+             break;
+           case 5:
+             x = 1965.0;
+             y = 2880.0;
+             break;
+           case 6:
+             x = 1840.0;
+             y = 3015.0;
+             break;
+           case 7:
+             x = 1840.0;
+             y = 3005.0;
+             break;
+           default:
+             break;
+           }
+       }
+       break;
+     case 2:
+       {
+         switch (lane) {
+           case 0:
+             x = 2985.0;
+             y = 2080.0;
+             break;
+           case 1:
+             x = 2995.0;
+             y = 2080.0;
+             break;
+           case 2:
+             x = 3120.0;
+             y = 1975.0;
+             break;
+           case 3:
+             x = 3120.0;
+             y = 1965.0;
+             break;
+           case 4:
+             x = 3015.0;
+             y = 1840.0;
+             break;
+           case 5:
+             x = 3005.0;
+             y = 1840.0;
+             break;
+           case 6:
+             x = 2880.0;
+             y = 1945.0;
+             break;
+           case 7:
+             x = 2880.0;
+             y = 1955.0;
+             break;
+           default:
+             break;
+           }
+       }
+     case 3:
+       {
+         switch (lane) {
+           case 0:
+             x = 1945.0;
+             y = 1040.0;
+             break;
+           case 1:
+             x = 1955.0;
+             y = 1040.0;
+             break;
+           case 2:
+             x = 2080.0;
+             y = 935.0;
+             break;
+           case 3:
+             x = 2080.0;
+             y = 925.0;
+             break;
+           case 4:
+             x = 1975.0;
+             y = 800.0;
+             break;
+           case 5:
+             x = 1965.0;
+             y = 800.0;
+             break;
+           case 6:
+             x = 1840.0;
+             y = 905.0;
+             break;
+           case 7:
+             x = 1840.0;
+             y = 915.0;
+             break;
+           default:
+             break;
+           }
+       }
+     case 4:
+       {
+         switch (lane) {
+           case 0:
+             x = 905.0;
+             y = 2080.0;
+             break;
+           case 1:
+             x = 915.0;
+             y = 2080.0;
+             break;
+           case 2:
+             x = 1040.0;
+             y = 1975.0;
+             break;
+           case 3:
+             x = 1040.0;
+             y = 1965.0;
+             break;
+           case 4:
+             x = 935.0;
+             y = 1840.0;
+             break;
+           case 5:
+             x = 925.0;
+             y = 1840.0;
+             break;
+           case 6:
+             x = 800.0;
+             y = 1945.0;
+             break;
+           case 7:
+             x = 800.0;
+             y = 1955.0;
+             break;
+           default:
+             break;
+           }
+       }
+     case 5:
+       {
+         switch (lane) {
+           case 0:
+             x = 1945.0;
+             y = 2080.0;
+             break;
+           case 1:
+             x = 1955.0;
+             y = 2080.0;
+             break;
+           case 2:
+             x = 2080.0;
+             y = 1975.0;
+             break;
+           case 3:
+             x = 2080.0;
+             y = 1965.0;
+             break;
+           case 4:
+             x = 1975.0;
+             y = 1840.0;
+             break;
+           case 5:
+             x = 1965.0;
+             y = 1840.0;
+             break;
+           case 6:
+             x = 1840.0;
+             y = 1945.0;
+             break;
+           case 7:
+             x = 1840.0;
+             y = 1955.0;
+             break;
+           default:
+             break;
+           }
+       }
+     default:
+       break;
+     }
+ }
 
  /**
   * @brief Utils::passIntersectionWait
@@ -1360,13 +1564,19 @@ intersection::HandleRead (Ptr<Socket> socket)
                     s_lock[(lane_num+2)%8] = false;
                   }
                 if(!pending.empty ()) {
-                    uint32_t pass_lane = pending[0].lane_id;
-                    std::cout << "pass lane is " << pass_lane  << "   " <<pending[0].vehicle_id << std::endl;
-                    uint32_t num = decideNum (pass_lane);  //how many vehicles are allowed to pass the intersection
-                    sendPermit(pass_lane, num);
-                    uint32_t next_inter = util.nextIntersection(pass_lane, intersection_id);
-                    sendPredict(pass_lane, num, next_inter);
-                    removeVehicle(pass_lane, num); //remove vehicles which are passing
+                    uint32_t pass_lane = 8;
+                    for(std::vector<rp>::iterator iter = pending.begin (); iter != pending.end () && iter->arrive; iter++) {
+                          pass_lane= (*iter).lane_id;
+                      }
+
+                    std::cout << "pass lane is " << pass_lane << std::endl;
+                    if(pass_lane != 8) {
+                        uint32_t num = decideNum (pass_lane);  //how many vehicles are allowed to pass the intersection
+                        sendPermit(pass_lane, num);
+                        uint32_t next_inter = util.nextIntersection(pass_lane, intersection_id);
+                        sendPredict(pass_lane, num, next_inter);
+                        removeVehicle(pass_lane, num); //remove vehicles which are passing
+                      }
                   }
                 }
                 std::cout << "end of unlock" << std::endl;
@@ -1766,28 +1976,101 @@ intersection::setSendSocket(Ipv4Address &address, uint16_t port) {
  */
 uint32_t
 intersection::decideNum(uint32_t lane) {
-   uint32_t count = 0;
 //   for(std::vector<rp>::iterator it = pending.begin (); it != pending.end (); it++) {
 //       if( it->lane_id == lane && it->time < (Simulator::Now ().GetSeconds () + 5) )
 //         count++;
 //     }
+
+   uint32_t count = 0, count1 = 0, count2 = 0;
    std::vector<rp>::iterator it;
    double now = Simulator::Now ().GetSeconds ();
-   double average_waiting_time = 0.0;
+   double sum_waiting_time = 0.0, average_pass_time = 0.0;
+   double sum_next_waiting = 0.0, average_next_pass = 0.0;
+   double priority_next = 0.0, priority_this = 0.0;
+
+   uint32_t next_lane = 8;
+   uint32_t next_last_vehicle = 0;
+   double x = 0.0, y = 0.0;
+
+   //judge if need to join
+   bool join = false;
+   for(it = pending.begin (); it != pending.end () && lane == it->lane_id; it++) {
+       if(it->arrive)
+         count2++;
+       else
+         join = true;
+     }
+   if(!join)
+     return count2;
+
+   //compute how many vehicles should to be added
    for(it = pending.begin (); it != pending.end (); it++) {
-       if(it->lane_id == lane && it->arrive) {
-         count++;
-         average_waiting_time += (now - it->arrive_time);
+       if(lane != it->lane_id && it->arrive) {
+           next_lane = it->lane_id;
+           break;
          }
      }
-   if(count != 0)
-      average_waiting_time /= count;
-//   double last_time = 0.0;
-//   for(it = pending.begin (); it != pending.end (); i++) {
-//       //find the last vehicle in the predict list
-//       if(it->lane_id == lane && !(it->arrive))
-//         last_predict = it->arrive_time;
-//     }
+   for(it = pending.begin (); it != pending.end () && next_lane == it->lane_id && it->arrive; it++)
+       count1++;
+   if(count2 > count1 && count1 != 0)
+     count = count1;
+   else
+     count = count2;
+
+   //sum waiting time
+   //next lane
+   if(count1 != 0 && next_lane != 8) {
+       count1 = count;
+       for(it = pending.begin (); it != pending.end () && next_lane == it->lane_id && it->arrive && count1 > 0; it++) {
+           x = it->x;
+           y = it->y;
+           sum_next_waiting += (now - it->arrive_time);
+           count1--;
+         }
+       average_next_pass = util.passIntersectionWait (next_lane, intersection_id, x, y);
+       average_next_pass += util.passIntersectionCore (next_lane, intersection_id, x, y);
+       priority_next = sum_next_waiting/(average_next_pass/(double)count);
+     }
+
+  //this lane
+    count2 = count;
+    for(it = pending.begin (); it != pending.end () && lane == it->lane_id && it->arrive && count2 > 0; it++) {
+        sum_waiting_time += (now - it->arrive_time);
+        count2--;
+    }
+    count = 0;
+    for(it = pending.begin (); it != pending.end () && lane == it->lane_id && it->arrive; it++) {
+        count++;
+      }
+    double ;
+    for(it = pending.begin (); it != pending.end () && lane == it->lane_id && !(it->arrive); it++) {
+        average_pass_time = it->arrive_time - now;   //the time that vehicle need to spend to arrive at the edge of intersection
+        util.enterWaiting(lane, intersection_id, x, y);  // get the edge of  waiting area
+        average_pass_time += util.passIntersectionWait (last_lane_id, intersection_id, x, y);
+        average_pass_time += util.passIntersectionCore (last_lane_id, intersection_id, x, y);;
+      }
+
+
+
+   for(it= pending.begin (); it != pending.end (); it++) {
+       //find the last vehicle in the same labe from the predict list
+       if(it->lane_id == lane && !(it->arrive)) {
+
+
+         average_pass_time = last_time - now;   //the time that vehicle need to spend to arrive at the edge of intersection
+         util.enterWaiting(last_lane_id, intersection_id, x, y);  // get the edge of  waiting area
+         last_time = util.passIntersectionWait (last_lane_id, intersection_id, x, y);
+         average_pass_time += last_time;
+         last_time = util.passIntersectionCore (last_lane_id, intersection_id, x, y);
+         average_pass_time += last_time;
+         average_pass_time /= (double)count2;
+         priority_this =
+         }
+     }
+   if(!(util.doubleEquals (last_time, 0.0))) { // if the predicted vehicles don't exist
+
+
+     }
    return count;
 }
 
@@ -2032,9 +2315,6 @@ vehicle::HandleRead (Ptr<Socket> socket)
                         }
 
                       time = util.passIntersectionIdle (lane_id, intersection_id, pos.x, pos.y);
-                      if(vehicle_id == 4) {
-                          std::cout << "asdf " << intersection_id << "  " << lane_id << " "  << pos.x << "  " << pos.y << std::endl;
-                        }
                       tmp_t += time;
                       wpt.position = pos;
                       std::cout << "********************* " << tmp_t << " x:" << pos.x << " y: " << pos.y << std::endl;
@@ -2567,7 +2847,7 @@ CMultiMain::SetUpApplication ()
 void CMultiMain::Run()
 {
 	std::cout << "Starting simulation for " << duration << " s ..."<< std::endl;
-	freopen("/home/wei/test/csim/multi1uniform.out", "w", stdout);
+	freopen("/home/wei/test/csim/traces0-1.txt", "w", stdout);
 	Simulator::Stop(Seconds(duration));
 	Simulator::Run();
 	Simulator::Destroy();
@@ -2580,6 +2860,3 @@ int main (int argc, char *argv[])
 	test.Simulate(argc, argv);
 	return 0;
 }
-
-
-
