@@ -360,7 +360,7 @@ Utils::travelTime(Vector &pos, const int nextWaiting, const double speed) const{
          return 0;
        break;
      case 2:
-       if(lane == 3) {
+       if(lane == 2) {
            time += (x - 3020.0)/speed_waiting;
          }
        else if(lane == 5) {
@@ -1281,7 +1281,7 @@ Utils::travelTime(Vector &pos, const int nextWaiting, const double speed) const{
            break;
          case 4:
          case 7:
-           next_inter = 7;
+           next_inter = 1;
            break;
          default:
            next_inter = 8;
@@ -1492,9 +1492,9 @@ intersection::HandleRead (Ptr<Socket> socket)
                 packet->RemoveHeader (seqTss);
                 laneID = seqTss.GetSeq ();
                 packet->RemoveHeader (seqTss);
-                nextLaneID = seqTss.GetSeq (); //id of lane in next intersection
-                packet->RemoveHeader (seqTss);
                 nextInterID = seqTss.GetSeq (); //id of next intersection
+                packet->RemoveHeader (seqTss);
+                nextLaneID = seqTss.GetSeq (); //id of lane in next intersection
                 packet->RemoveHeader (seqTss);
                 x1= seqTss.GetSeq ();
                 packet->RemoveHeader (seqTss);
@@ -1512,6 +1512,7 @@ intersection::HandleRead (Ptr<Socket> socket)
                 y /= 1000.0;
                 y += y1;
 
+//                std::cout << "vehicle " << vehID << " send request to pass intersection, " << intersection_id << " , the next intersection " << nextInterID << std::endl;
                 bool passing = updateRP(vehID, laneID, nextLaneID, nextInterID, x, y,last);    //update the request pending list
                 if(passing) {
                     sendPermit(address, vehID, laneID, last); //scheduled to pass the intersection
@@ -1654,6 +1655,7 @@ intersection::updateRP(uint32_t vehicle, uint32_t lane, uint32_t next_lane, uint
             recorded = true; //recorded
             it->next_lane_id = next_lane;
             it->next_inter_id = next_inter;
+            std::cout << "the vehicle " << vehicle << " want to pass next intersection " << next_inter << std::endl;
             it->arrive = true; //true means the vehicle has arrived at this intersection
             it->arrive_time = Simulator::Now ().GetSeconds ();
             std::sort(pending.begin(),pending.end(), sortByTime);
@@ -2335,6 +2337,7 @@ vehicle::HandleRead (Ptr<Socket> socket)
                       wpt.position = pos;
                       wpt.time = Seconds(tmp_t);
                       mobility->AddWaypoint (wpt);
+                      std::cout <<Simulator::Now ().GetSeconds () << "s  " << tmp_t << "s"  << std::endl;
                       Simulator::Schedule (Seconds (tmp_t - Simulator::Now ().GetSeconds ()), &vehicle::sendRequest, this);
 
                       std::cout << "vehicle " << vehicle_id << " start to pass the intersection " << intersection_id << std::endl;
@@ -2401,9 +2404,9 @@ vehicle::sendRequest()
         }
       path_index = tmp_index;
       next_lane = util.whichLane (util.whichWaitingArea(paths[tmp_index]), util.whichWaitingArea (paths[tmp_index+1]));
-      seqTss.SetSeq (next_inter);
-      packet->AddHeader (seqTss);
       seqTss.SetSeq (next_lane);
+      packet->AddHeader (seqTss);
+      seqTss.SetSeq (next_inter);
       packet->AddHeader (seqTss);
 
       seqTss.SetSeq (lane_id);
@@ -2428,7 +2431,7 @@ vehicle::sendRequest()
       mobility->AddWaypoint (wpt);
 
       std::cout << "x:" << next_x << " y:" << next_y << " time:" << time << "  " << mobility->GetVelocity ().y << std::endl;
-      std::cout << "vehicle " << vehicle_id << " at intersection " << intersection_id << " send request"<< std::endl;
+      std::cout << "vehicle " << vehicle_id << " at intersection " << intersection_id << " send request, next intersection " << next_inter << ", next lane " << next_lane << std::endl;
 }
 
 
@@ -2503,131 +2506,131 @@ class CMultiMain
 {
 
 public:
-	CMultiMain();
-	~CMultiMain();
-	void Simulate(int argc, char *argv[]);
+        CMultiMain();
+        ~CMultiMain();
+        void Simulate(int argc, char *argv[]);
 
 
 private:
-	Ptr<Socket> source;
-	std::string traceFile;
-	std::string logFile;
-	std::string phyMode;
-	std::string lossModle;
-	std::string homepath;
-	std::string folder;
-	std::ofstream os;
-	double freq;//CCH
-	double txp;
-	double range;
-	uint32_t packetSize; // bytes
-	uint32_t numPackets;
-	double interval; // seconds
-	bool verbose;
-	uint32_t vehNum;
-	uint32_t conNum;
-	double duration;
-	NodeContainer m_vehicles; //Cars
-	NodeContainer m_controllers; //Vehicles
-	NetDeviceContainer m_VehDevices, m_ConDevices, m_CSMADevices;
-	Ipv4InterfaceContainer m_VehInterface, m_ConInterface, m_CSMAInterface;
+        Ptr<Socket> source;
+        std::string traceFile;
+        std::string logFile;
+        std::string phyMode;
+        std::string lossModle;
+        std::string homepath;
+        std::string folder;
+        std::ofstream os;
+        double freq;//CCH
+        double txp;
+        double range;
+        uint32_t packetSize; // bytes
+        uint32_t numPackets;
+        double interval; // seconds
+        bool verbose;
+        uint32_t vehNum;
+        uint32_t conNum;
+        double duration;
+        NodeContainer m_vehicles; //Cars
+        NodeContainer m_controllers; //Vehicles
+        NetDeviceContainer m_VehDevices, m_ConDevices, m_CSMADevices;
+        Ipv4InterfaceContainer m_VehInterface, m_ConInterface, m_CSMAInterface;
 
-	Utils util;
-	std::vector< std::string > vec_str; //save the information of vehicles, one line represents the information of one vehicle
-	std::vector< std::vector<uint32_t> > vec_vec_uint_path; //save paths of vehicles
-	std::vector< Ptr<intersection> > vec_ptr_inter;	// keep the smart point of intersections
-	double speed_idle;  //the speed when vehicles are in idle area
-	double speed_waiting; //the speed when vehicles are in waiting area
-	uint32_t goStraight;  // the time for going Straight to pass the intersection
-	uint32_t turnLeft;	// the time for turning left to pass the intersection
-	uint32_t waitingAreaLength;
-	uint32_t coreAreaLength;
-	uint32_t idleAreaLength;
-	std::vector<Node> vec_vehicles;  //the vector to keep all vehicles object
-	std::vector<intersection> vec_intersections;  //the vector to keep all intersections object
-	uint32_t spaceOccupied;	// the space of a vehicle occupied when it is in the waiting lane
-	std::vector<bool> req;
+        Utils util;
+        std::vector< std::string > vec_str; //save the information of vehicles, one line represents the information of one vehicle
+        std::vector< std::vector<uint32_t> > vec_vec_uint_path; //save paths of vehicles
+        std::vector< Ptr<intersection> > vec_ptr_inter;	// keep the smart point of intersections
+        double speed_idle;  //the speed when vehicles are in idle area
+        double speed_waiting; //the speed when vehicles are in waiting area
+        uint32_t goStraight;  // the time for going Straight to pass the intersection
+        uint32_t turnLeft;	// the time for turning left to pass the intersection
+        uint32_t waitingAreaLength;
+        uint32_t coreAreaLength;
+        uint32_t idleAreaLength;
+        std::vector<Node> vec_vehicles;  //the vector to keep all vehicles object
+        std::vector<intersection> vec_intersections;  //the vector to keep all intersections object
+        uint32_t spaceOccupied;	// the space of a vehicle occupied when it is in the waiting lane
+        std::vector<bool> req;
 
-	void CourseChange (std::string foo, Ptr<const MobilityModel> mobility);
-	void SetDefault();
-	void ParseArguments(int argc, char *argv[]);
-	void LoadTraffic();
-	void CreateNode();
-	void CreateChannels();
-	void InstallInternetStack();
-	void ConfigMobility();
-	void Run();
+        void CourseChange (std::string foo, Ptr<const MobilityModel> mobility);
+        void SetDefault();
+        void ParseArguments(int argc, char *argv[]);
+        void LoadTraffic();
+        void CreateNode();
+        void CreateChannels();
+        void InstallInternetStack();
+        void ConfigMobility();
+        void Run();
 //	void CMultiMain::enterAndRequest(Ptr<const MobilityModel> mobility, vehicle &veh, uint32_t currentIndex, Vector &pos);
-	void SetUpApplication();
+        void SetUpApplication();
 };
 
 
 CMultiMain::CMultiMain()
 {
-	phyMode = "OfdmRate6MbpsBW10MHz";
-	freq = 5.890e9;  //802.11p
-	txp = 20;  // CCH
-	range = 300.0; //CCH
-	packetSize = 1000; // bytes
-	numPackets = 1;
-	interval = 0.1; // seconds
-	verbose = false;
-	duration = 180;
-	vehNum = 0;
-	conNum = 5;
-	speed_idle = 20;
-	speed_waiting = 12;
-	goStraight = 3.0;
-	turnLeft = 4.0;
+        phyMode = "OfdmRate6MbpsBW10MHz";
+        freq = 5.890e9;  //802.11p
+        txp = 20;  // CCH
+        range = 300.0; //CCH
+        packetSize = 1000; // bytes
+        numPackets = 1;
+        interval = 0.1; // seconds
+        verbose = false;
+        duration = 180;
+        vehNum = 0;
+        conNum = 5;
+        speed_idle = 20;
+        speed_waiting = 12;
+        goStraight = 3.0;
+        turnLeft = 4.0;
 
-	spaceOccupied = 4;
-	waitingAreaLength = 100;
-	coreAreaLength = 40;
-	idleAreaLength = 800;
-	homepath = getenv("HOME");
-	folder="csim";
+        spaceOccupied = 4;
+        waitingAreaLength = 100;
+        coreAreaLength = 40;
+        idleAreaLength = 800;
+        homepath = getenv("HOME");
+        folder="csim";
 }
 
 CMultiMain::~CMultiMain()
 {
-	os.close();
+        os.close();
 }
 
 void CMultiMain::Simulate(int argc, char *argv[])
 {
-	SetDefault();
-	ParseArguments(argc, argv);
-	LoadTraffic();
-	CreateNode();
-	CreateChannels();
-	InstallInternetStack();
-	ConfigMobility();
-	SetUpApplication();
-	Run();
+        SetDefault();
+        ParseArguments(argc, argv);
+        LoadTraffic();
+        CreateNode();
+        CreateChannels();
+        InstallInternetStack();
+        ConfigMobility();
+        SetUpApplication();
+        Run();
 }
 
 void CMultiMain::SetDefault()
 {
-	//Handle By Constructor
+        //Handle By Constructor
 }
 
 void CMultiMain::ParseArguments(int argc, char *argv[])
 {
-	CommandLine cmd;
+        CommandLine cmd;
 //	cmd.AddValue ("traceFile", "Ns2 movement trace file", traceFile);
-	cmd.AddValue ("vehNum", "Number of vehicles", vehNum);
+        cmd.AddValue ("vehNum", "Number of vehicles", vehNum);
 //	cmd.AddValue ("conNum", "Number of controllers", conNum);
-	cmd.AddValue ("duration", "Duration of Simulation", duration);
+        cmd.AddValue ("duration", "Duration of Simulation", duration);
 //	cmd.AddValue ("logFile", "Log file", logFile);
-	cmd.AddValue ("folder", "Working Directory", folder);
-	cmd.AddValue ("txp", "TX power for CCH", txp);
-	cmd.AddValue ("range", "Range for CCH", range);
-	cmd.AddValue ("verbose", "turn on all WifiNetDevice log components", verbose);
-	cmd.Parse (argc,argv);
+        cmd.AddValue ("folder", "Working Directory", folder);
+        cmd.AddValue ("txp", "TX power for CCH", txp);
+        cmd.AddValue ("range", "Range for CCH", range);
+        cmd.AddValue ("verbose", "turn on all WifiNetDevice log components", verbose);
+        cmd.Parse (argc,argv);
 
-	// Fix non-unicast data rate to be the same as that of unicast
-	Config::SetDefault ("ns3::WifiRemoteStationManager::NonUnicastMode",
-			      StringValue (phyMode));
+        // Fix non-unicast data rate to be the same as that of unicast
+        Config::SetDefault ("ns3::WifiRemoteStationManager::NonUnicastMode",
+                              StringValue (phyMode));
 
 }
 
@@ -2637,70 +2640,70 @@ void CMultiMain::ParseArguments(int argc, char *argv[])
 void
 CMultiMain::LoadTraffic()
 {
-	DIR* dir = NULL;
-	//DIR* subdir=NULL;
-	std::string temp(homepath+"/test/"+folder);
-	if((dir = opendir(temp.data()))==NULL)
-		NS_FATAL_ERROR("Cannot open input path "<<temp.data()<<", Aborted.");
+        DIR* dir = NULL;
+        //DIR* subdir=NULL;
+        std::string temp(homepath+"/test/"+folder);
+        if((dir = opendir(temp.data()))==NULL)
+                NS_FATAL_ERROR("Cannot open input path "<<temp.data()<<", Aborted.");
 
 
-	std::string vehicles_trace = temp + "/traces.txt";
+        std::string vehicles_trace = temp + "/traces.txt";
 
-	std::string output = temp + "/result.txt";
+        std::string output = temp + "/result.txt";
 
-	vehNum = util.readTraceFile(vehicles_trace.c_str (), vec_str);
-	std::cout << vehNum << " vehicles to be scheduled" << std::endl;
-	os.open(output.data(),std::ios::out);
+        vehNum = util.readTraceFile(vehicles_trace.c_str (), vec_str);
+        std::cout << vehNum << " vehicles to be scheduled" << std::endl;
+        os.open(output.data(),std::ios::out);
 }
 
 
 void
 CMultiMain::CreateNode()
 {
-	m_vehicles.Create( vehNum );//Cars
-	m_controllers.Create ( conNum );  //cotrollers
+        m_vehicles.Create( vehNum );//Cars
+        m_controllers.Create ( conNum );  //cotrollers
 
-	for(uint32_t i = 0; i < vehNum; i++) {
-	    req.push_back (false);
-	  }
+        for(uint32_t i = 0; i < vehNum; i++) {
+            req.push_back (false);
+          }
 }
 
 
 void
 CMultiMain::CreateChannels()
 {
-	//===channel
-	YansWifiChannelHelper channelHelper;
-	channelHelper.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
-	channelHelper.AddPropagationLoss("ns3::RangePropagationLossModel", "MaxRange",
-				DoubleValue(range));
+        //===channel
+        YansWifiChannelHelper channelHelper;
+        channelHelper.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
+        channelHelper.AddPropagationLoss("ns3::RangePropagationLossModel", "MaxRange",
+                                DoubleValue(range));
 
-	// the channelg
-	Ptr<YansWifiChannel> waveChannel = channelHelper.Create();
+        // the channelg
+        Ptr<YansWifiChannel> waveChannel = channelHelper.Create();
 
-	//===wifiphy
-	YansWifiPhyHelper wavePhy =  YansWifiPhyHelper::Default ();
-	wavePhy.SetChannel (waveChannel);
-	wavePhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11);
-	wavePhy.Set ("TxPowerStart",DoubleValue (txp));
-	wavePhy.Set ("TxPowerEnd", DoubleValue (txp));
+        //===wifiphy
+        YansWifiPhyHelper wavePhy =  YansWifiPhyHelper::Default ();
+        wavePhy.SetChannel (waveChannel);
+        wavePhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11);
+        wavePhy.Set ("TxPowerStart",DoubleValue (txp));
+        wavePhy.Set ("TxPowerEnd", DoubleValue (txp));
 
-	// 802.11p mac
-	NqosWaveMacHelper waveMac = NqosWaveMacHelper::Default ();
+        // 802.11p mac
+        NqosWaveMacHelper waveMac = NqosWaveMacHelper::Default ();
 
-	Wifi80211pHelper waveHelper = Wifi80211pHelper::Default ();
-	waveHelper.SetRemoteStationManager ("ns3::ConstantRateWifiManager",
-											"DataMode",StringValue (phyMode),
-											"ControlMode",StringValue (phyMode));
+        Wifi80211pHelper waveHelper = Wifi80211pHelper::Default ();
+        waveHelper.SetRemoteStationManager ("ns3::ConstantRateWifiManager",
+                                                                                        "DataMode",StringValue (phyMode),
+                                                                                        "ControlMode",StringValue (phyMode));
 
-	m_VehDevices = waveHelper.Install(wavePhy, waveMac, m_vehicles);
-	m_ConDevices = waveHelper.Install(wavePhy, waveMac, m_controllers);
+        m_VehDevices = waveHelper.Install(wavePhy, waveMac, m_vehicles);
+        m_ConDevices = waveHelper.Install(wavePhy, waveMac, m_controllers);
 
-	CsmaHelper csma;
-	csma.SetChannelAttribute ("DataRate", StringValue ("100Mbps"));
-	csma.SetChannelAttribute ("Delay", TimeValue (NanoSeconds (6560)));
+        CsmaHelper csma;
+        csma.SetChannelAttribute ("DataRate", StringValue ("100Mbps"));
+        csma.SetChannelAttribute ("Delay", TimeValue (NanoSeconds (6560)));
 
-	m_CSMADevices = csma.Install (m_controllers);
+        m_CSMADevices = csma.Install (m_controllers);
 
 }
 
@@ -2746,78 +2749,78 @@ CMultiMain::CourseChange (std::string foo, Ptr<const MobilityModel> mobility)
 void
 CMultiMain::ConfigMobility()
 {
-	std::cout << "Config mobility" << std::endl;
-	//here we will set the position of vehicles and set their mobility model
-	std::vector<Ptr<MobilityModel> > mobilityStack;
+        std::cout << "Config mobility" << std::endl;
+        //here we will set the position of vehicles and set their mobility model
+        std::vector<Ptr<MobilityModel> > mobilityStack;
 
-	ObjectFactory mobilityFactory;
-	mobilityFactory.SetTypeId ("ns3::WaypointMobilityModel");
+        ObjectFactory mobilityFactory;
+        mobilityFactory.SetTypeId ("ns3::WaypointMobilityModel");
 
-	// Populate the vector of mobility models.
-	for (uint32_t i = 0; i < vehNum; i++)
-	{
-		// Create a new mobility model.
-		Ptr<WaypointMobilityModel> model = mobilityFactory.Create ()->GetObject<WaypointMobilityModel> ();
+        // Populate the vector of mobility models.
+        for (uint32_t i = 0; i < vehNum; i++)
+        {
+                // Create a new mobility model.
+                Ptr<WaypointMobilityModel> model = mobilityFactory.Create ()->GetObject<WaypointMobilityModel> ();
 
-		// Add this mobility model to the stack.
-		mobilityStack.push_back (model);
-		Simulator::Schedule (Seconds (0.0), &Object::Initialize, model);
-	}
+                // Add this mobility model to the stack.
+                mobilityStack.push_back (model);
+                Simulator::Schedule (Seconds (0.0), &Object::Initialize, model);
+        }
 
-	uint32_t im = 0;
-	for(std::vector<std::string>::iterator vec_it1 = vec_str.begin (); vec_it1 != vec_str.end (); vec_it1++) {
+        uint32_t im = 0;
+        for(std::vector<std::string>::iterator vec_it1 = vec_str.begin (); vec_it1 != vec_str.end (); vec_it1++) {
 
-	    //get the paths of vehicles
-	    std::vector<std::string> tmp_vec;
-	    util.split (*vec_it1, tmp_vec);
+            //get the paths of vehicles
+            std::vector<std::string> tmp_vec;
+            util.split (*vec_it1, tmp_vec);
 
-	    std::vector<uint32_t> tmp_path;
-	    for(std::vector<std::string>::iterator vec_it2 = tmp_vec.begin () + 3; vec_it2 != tmp_vec.end (); vec_it2++)
-		tmp_path.push_back (atoi ((*vec_it2).c_str()));
-	    vec_vec_uint_path.push_back (tmp_path);
+            std::vector<uint32_t> tmp_path;
+            for(std::vector<std::string>::iterator vec_it2 = tmp_vec.begin () + 3; vec_it2 != tmp_vec.end (); vec_it2++)
+                tmp_path.push_back (atoi ((*vec_it2).c_str()));
+            vec_vec_uint_path.push_back (tmp_path);
 
-	    Ptr<WaypointMobilityModel> mob = DynamicCast<WaypointMobilityModel>(mobilityStack[im]);
+            Ptr<WaypointMobilityModel> mob = DynamicCast<WaypointMobilityModel>(mobilityStack[im]);
 
-	    ns3::Vector initPos(atof(tmp_vec[1].c_str()), atof(tmp_vec[2].c_str()), 0.0);
-	    Waypoint wpt (Seconds (atof(tmp_vec[0].c_str())), initPos);
-	    mob->AddWaypoint (wpt);
+            ns3::Vector initPos(atof(tmp_vec[1].c_str()), atof(tmp_vec[2].c_str()), 0.0);
+            Waypoint wpt (Seconds (atof(tmp_vec[0].c_str())), initPos);
+            mob->AddWaypoint (wpt);
 
-	    double travel = util.travelTime (initPos, (uint32_t)atoi(tmp_vec[3].c_str()), speed_idle);
-	    double next_time = wpt.time.GetSeconds () + travel;
-	    std::cout << tmp_vec[0] << " , next time: " << travel << std::endl;
-	    wpt.time = Seconds(next_time);
-	    wpt.position = initPos;
-	    std::cout << wpt.position.x << "  " << wpt.position.y << std::endl;
-	    mob->AddWaypoint (wpt);
-	    m_vehicles.Get(im)->AggregateObject(mob);
-	    im++;
-	  }
+            double travel = util.travelTime (initPos, (uint32_t)atoi(tmp_vec[3].c_str()), speed_idle);
+            double next_time = wpt.time.GetSeconds () + travel;
+            std::cout << tmp_vec[0] << " , next time: " << travel << std::endl;
+            wpt.time = Seconds(next_time);
+            wpt.position = initPos;
+            std::cout << wpt.position.x << "  " << wpt.position.y << std::endl;
+            mob->AddWaypoint (wpt);
+            m_vehicles.Get(im)->AggregateObject(mob);
+            im++;
+          }
 
-	for(uint32_t i = 0; i < vehNum; i++) {
-	    std::ostringstream oss;
-	    oss << "/NodeList/"
-		<< m_vehicles.Get (i)->GetId ()
-		<< "/$ns3::MobilityModel/CourseChange";
-	    Config::Connect (oss.str (),
-				MakeCallback (&CMultiMain::CourseChange, this));
-	  }
+        for(uint32_t i = 0; i < vehNum; i++) {
+            std::ostringstream oss;
+            oss << "/NodeList/"
+                << m_vehicles.Get (i)->GetId ()
+                << "/$ns3::MobilityModel/CourseChange";
+            Config::Connect (oss.str (),
+                                MakeCallback (&CMultiMain::CourseChange, this));
+          }
 
 
-	//here we set the mobility for the controllers
-	MobilityHelper mobility;
+        //here we set the mobility for the controllers
+        MobilityHelper mobility;
 
-	//configure the position for five constrollers
-	Ptr<ListPositionAllocator> positionAlloc =
-	  CreateObject<ListPositionAllocator> ();
-	positionAlloc->Add(Vector(1960,3000,0));
-	positionAlloc->Add(Vector(3000,1960,0));
-	positionAlloc->Add(Vector(1960,920,0));
-	positionAlloc->Add(Vector(920,1960,0));
-	positionAlloc->Add(Vector(1960,1960,0));
+        //configure the position for five constrollers
+        Ptr<ListPositionAllocator> positionAlloc =
+          CreateObject<ListPositionAllocator> ();
+        positionAlloc->Add(Vector(1960,3000,0));
+        positionAlloc->Add(Vector(3000,1960,0));
+        positionAlloc->Add(Vector(1960,920,0));
+        positionAlloc->Add(Vector(920,1960,0));
+        positionAlloc->Add(Vector(1960,1960,0));
 
-	mobility.SetPositionAllocator (positionAlloc);
-	mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
-	mobility.Install (m_controllers);
+        mobility.SetPositionAllocator (positionAlloc);
+        mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
+        mobility.Install (m_controllers);
 }
 
 
@@ -2853,17 +2856,17 @@ CMultiMain::SetUpApplication ()
 
 void CMultiMain::Run()
 {
-	std::cout << "Starting simulation for " << duration << " s ..."<< std::endl;
-	freopen("/home/wei/test/csim/traces0-1.txt", "w", stdout);
-	Simulator::Stop(Seconds(duration));
-	Simulator::Run();
-	Simulator::Destroy();
+        std::cout << "Starting simulation for " << duration << " s ..."<< std::endl;
+        freopen("/home/wei/test/csim/traces0-1.txt", "w", stdout);
+        Simulator::Stop(Seconds(duration));
+        Simulator::Run();
+        Simulator::Destroy();
 }
 
 
 int main (int argc, char *argv[])
 {
-	CMultiMain test;
-	test.Simulate(argc, argv);
-	return 0;
+        CMultiMain test;
+        test.Simulate(argc, argv);
+        return 0;
 }
