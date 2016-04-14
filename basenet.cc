@@ -1359,12 +1359,19 @@ public:
           void Start(void);
           void SetUp(Ipv4InterfaceContainer csmaInterface, uint32_t inter_id);
           std::vector<rp>& getPending();
+          std::vector<uint32_t> vec_average_longest_queue;
+          std::vector<uint32_t> vec_average_throughput;
+          std::vector<double>   vec_sum_waiting_time;
+          double sum_wait_time;
+          uint32_t longest_queue;
+          uint32_t m_pass;  //how many vehicles have passed from this intersection
 
 private:
   virtual void StartApplication (void);
   virtual void StopApplication (void);
 //          bool sortByTime(const rp &vehicle1, const rp &vehicle2);
           static void recvCallback(Ptr<Socket> sock);
+          void saveStatistics();
           bool updateRP (uint32_t vehicle, uint32_t lane, uint32_t next_lane, uint32_t next_inter, double x, double y, bool &last);
           void sendPermit (Ipv4Address &address, uint32_t vehicle, uint32_t lane, bool last);
           void sendPermit (uint32_t lane, uint32_t num);
@@ -1382,7 +1389,6 @@ private:
   uint16_t m_port_accept; //the port for receiving packets from vehicles
   uint16_t m_port_send; //the port for sending vehicles
   bool s_lock[8]; // locks for lanes
-  uint32_t m_pass;  //how many vehicles have passed from this intersection
   uint32_t s_packetSize;  //the size of packet
   Utils util; //tools
   std::vector<rp> pending;
@@ -1393,6 +1399,7 @@ private:
   double speed_idle;
   double wait_area_length;
   double idle_area_length;
+  uint32_t previous_throughput_sum;
 };
 
 
@@ -1407,11 +1414,14 @@ intersection::intersection ()
     m_port_accept = 1024;
     m_port_send = 9;
     s_packetSize = 128;
-    m_pass = 0;
     speed_waiting = 12;
     speed_idle = 20;
     wait_area_length = 100;
     idle_area_length = 800;
+    sum_wait_time = 0;
+    longest_queue = 0;
+    m_pass = 0;
+    previous_throughput_sum = 0;
     for(int i = 0;i < 8;i++)
         s_lock[i] = false;  //init the locks.
 }
@@ -1436,11 +1446,24 @@ intersection::StartApplication (void)
       std::cout << "intersection " << intersection_id << " set accept address" << std::endl;
     }
   m_socket_accept->SetRecvCallback (MakeCallback (&intersection::HandleRead, this));
+  //for statistics
+  for(uint32_t i = 1; i < 20 && intersection_id == 5; i++) {
+      Simulator::Schedule(Seconds(i*60), &intersection::saveStatistics, this);
+  }
 }
 
 std::vector<rp>&
 intersection::getPending() {
   return pending;
+}
+
+void
+intersection::saveStatistics() {
+  vec_average_longest_queue.push_back (longest_queue);
+  vec_average_throughput.push_back (m_pass - previous_throughput_sum);
+  vec_sum_waiting_time.push_back (sum_wait_time);
+  longest_queue = 0;
+  previous_throughput_sum = m_pass;
 }
 
 void
@@ -1687,6 +1710,9 @@ intersection::updateRP(uint32_t vehicle, uint32_t lane, uint32_t next_lane, uint
           it->y = y;
         }
     }
+
+  if(count + 1 > longest_queue)
+    longest_queue = count + 1;
   return false;
 }
 
@@ -1785,6 +1811,7 @@ intersection::sendPermit ( uint32_t lane, uint32_t num) {
           last_vehicle = it->vehicle_id;
           num--;
           m_pass++;
+          sum_wait_time += (Simulator::Now ().GetSeconds () - it->arrive_time);
         }
     }
 
@@ -1985,13 +2012,23 @@ intersection::setSendSocket(Ipv4Address &address, uint16_t port) {
  * @brief intersection::decideNum decide how many vehicles on lane can pass the intersection
  * @param lane
  */
+
+/**
 uint32_t
 intersection::decideNum(uint32_t lane) {
-//   for(std::vector<rp>::iterator it = pending.begin (); it != pending.end (); it++) {
-//       if( it->lane_id == lane && it->time < (Simulator::Now ().GetSeconds () + 5) )
-//         count++;
-//     }
+     uint32_t count = 0;
+     for(std::vector<rp>::iterator it = pending.begin (); it != pending.end (); it++) {
+         if( it->lane_id == lane)
+           count++;
+       }
+     return count;
+}
+**/
 
+
+
+uint32_t
+intersection::decideNum(uint32_t lane) {
    uint32_t count = 0, count1 = 0, count2 = 0;
    std::vector<rp>::iterator it;
    double now = Simulator::Now ().GetSeconds ();
@@ -2039,6 +2076,8 @@ intersection::decideNum(uint32_t lane) {
 
    if(count2 > count1 && count1 != 0)
      count = count1;
+   else if(count1 == 0)
+     return count2;
    else
      count = count2;
 
@@ -2065,6 +2104,19 @@ intersection::decideNum(uint32_t lane) {
        average_next_pass = util.passIntersectionWait (next_lane, intersection_id, x, y);
        average_next_pass += util.passIntersectionCore (next_lane, intersection_id, x, y);
        priority_next = sum_next_waiting/(average_next_pass/(double)count1);
+     }
+
+   if(average_next_pass > 0) {
+       for(it = pending.begin (); it!= pending.end (); it++) {
+           if(lane == it->lane_id && it->arrive) {
+               x = it->x;
+               y = it->y;
+             }
+         }
+       average_pass_time = util.passIntersectionWait (lane, intersection_id, x, y);
+       average_pass_time += util.passIntersectionCore (lane, intersection_id, x, y);
+       if(average_next_pass + average_pass_time + now < it->arrive_time)
+         return count2;
      }
 
   //this lane
@@ -2102,8 +2154,6 @@ intersection::decideNum(uint32_t lane) {
       return count;
 }
 
-
-//intersection::
 
 
 
@@ -2327,7 +2377,7 @@ vehicle::HandleRead (Ptr<Socket> socket)
                       std::cout << "the time pass the core of intersection " << wpt.time.GetSeconds () << std::endl;
 
                       if(vehicle_id == m_last_id) { //send unlock message
-                          std::cout << "vehicle " << vehicle_id << " need " << (t_last- Simulator::Now ().GetSeconds ()) << "s pass the intersection" << std::endl;
+//                          std::cout << "vehicle " << vehicle_id << " need " << (t_last- Simulator::Now ().GetSeconds ()) << "s pass the intersection" << std::endl;
                           Time time_unlock = Seconds (t_last- Simulator::Now ().GetSeconds ()) ;
                           Simulator::Schedule (time_unlock, &vehicle::sendUnlock, this);
                         }
@@ -2337,7 +2387,7 @@ vehicle::HandleRead (Ptr<Socket> socket)
                       wpt.position = pos;
                       wpt.time = Seconds(tmp_t);
                       mobility->AddWaypoint (wpt);
-                      std::cout <<Simulator::Now ().GetSeconds () << "s  " << tmp_t << "s"  << std::endl;
+//                      std::cout <<Simulator::Now ().GetSeconds () << "s  " << tmp_t << "s"  << std::endl;
                       Simulator::Schedule (Seconds (tmp_t - Simulator::Now ().GetSeconds ()), &vehicle::sendRequest, this);
 
                       std::cout << "vehicle " << vehicle_id << " start to pass the intersection " << intersection_id << std::endl;
@@ -2380,7 +2430,7 @@ vehicle::sendRequest()
       packet->AddHeader (seqTss);
 
       if(begin) { //the first time that the vehicle send request
-          std::cout << "the first time to pass intersection" << std::endl;
+//          std::cout << "the first time to pass intersection" << std::endl;
           path_index = 0;
           begin = false;
         }
@@ -2430,8 +2480,8 @@ vehicle::sendRequest()
       mobility->AddWaypoint (w);
       mobility->AddWaypoint (wpt);
 
-      std::cout << "x:" << next_x << " y:" << next_y << " time:" << time << "  " << mobility->GetVelocity ().y << std::endl;
-      std::cout << "vehicle " << vehicle_id << " at intersection " << intersection_id << " send request, next intersection " << next_inter << ", next lane " << next_lane << std::endl;
+//      std::cout << "x:" << next_x << " y:" << next_y << " time:" << time << "  " << mobility->GetVelocity ().y << std::endl;
+//      std::cout << "vehicle " << vehicle_id << " at intersection " << intersection_id << " send request, next intersection " << next_inter << ", next lane " << next_lane << std::endl;
 }
 
 
@@ -2509,6 +2559,7 @@ public:
         CMultiMain();
         ~CMultiMain();
         void Simulate(int argc, char *argv[]);
+        void PrintStatistics();
 
 
 private:
@@ -2575,7 +2626,7 @@ CMultiMain::CMultiMain()
         numPackets = 1;
         interval = 0.1; // seconds
         verbose = false;
-        duration = 180;
+        duration = 600;
         vehNum = 0;
         conNum = 5;
         speed_idle = 20;
@@ -2787,10 +2838,10 @@ CMultiMain::ConfigMobility()
 
             double travel = util.travelTime (initPos, (uint32_t)atoi(tmp_vec[3].c_str()), speed_idle);
             double next_time = wpt.time.GetSeconds () + travel;
-            std::cout << tmp_vec[0] << " , next time: " << travel << std::endl;
+//            std::cout << tmp_vec[0] << " , next time: " << travel << std::endl;
             wpt.time = Seconds(next_time);
             wpt.position = initPos;
-            std::cout << wpt.position.x << "  " << wpt.position.y << std::endl;
+//            std::cout << wpt.position.x << "  " << wpt.position.y << std::endl;
             mob->AddWaypoint (wpt);
             m_vehicles.Get(im)->AggregateObject(mob);
             im++;
@@ -2824,9 +2875,6 @@ CMultiMain::ConfigMobility()
 }
 
 
-
-
-
 void
 CMultiMain::SetUpApplication ()
 {
@@ -2854,10 +2902,39 @@ CMultiMain::SetUpApplication ()
 }
 
 
-void CMultiMain::Run()
+void
+CMultiMain::PrintStatistics() {
+          // need to give the statistics of average throught per minute, the average waiting time per minute, the longest_queue
+          Ptr<intersection> ints = vec_ptr_inter[4];
+          std::cout << ints->m_pass << " has pass the intersection 5" << std::endl;
+//          std::cout << ints->sum_wait_time << "s sum wait time" << std::endl;
+          std::cout << " the sum waiting time" ;
+          for(std::vector<double>::iterator it = ints->vec_sum_waiting_time.begin ();
+              it != ints->vec_sum_waiting_time.end (); it++) {
+              std::cout << *it << "  ";
+            }
+          std::cout << std::endl << "average waiting time: " << ints->sum_wait_time/ints->m_pass << std::endl;
+          std::cout << "the throughput of system in every minute: ";
+          for(std::vector<uint32_t>::iterator it = ints->vec_average_throughput.begin ();
+              it != ints->vec_average_throughput.end (); it++) {
+              std::cout << *it << "  ";
+            }
+          std::cout << std::endl << "the average throughput of vehicles: " << ints->m_pass / ints->vec_average_throughput.size () << std::endl;
+          uint32_t average_queue_length = 0;
+          std::cout << "the length of queue in every minute: ";
+          for(std::vector<uint32_t>::iterator it = ints->vec_average_longest_queue.begin ();
+              it != ints->vec_average_longest_queue.end (); it++) {
+              std::cout << *it << "  ";
+              average_queue_length += *it;
+            }
+          std::cout << "the average queue length: " << average_queue_length/ints->vec_average_longest_queue.size ();
+}
+
+void
+CMultiMain::Run()
 {
         std::cout << "Starting simulation for " << duration << " s ..."<< std::endl;
-        freopen("/home/wei/test/csim/traces0-1.txt", "w", stdout);
+        freopen("/home/wei/test/csim/traces0-1-origin.txt", "w", stdout);
         Simulator::Stop(Seconds(duration));
         Simulator::Run();
         Simulator::Destroy();
@@ -2868,5 +2945,6 @@ int main (int argc, char *argv[])
 {
         CMultiMain test;
         test.Simulate(argc, argv);
+        test.PrintStatistics ();
         return 0;
 }
